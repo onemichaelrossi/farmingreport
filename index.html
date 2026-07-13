@@ -5,169 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Farming &amp; Turf Weather Dashboard</title>
 <meta name="description" content="Predictive weather, GDD, disease risk and irrigation dashboard for turf and farming sites.">
-<style>
-  :root {
-    --surface-1:      #fcfcfb;
-    --page-plane:     #f9f9f7;
-    --text-primary:   #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted:     #898781;
-    --gridline:       #e1e0d9;
-    --baseline:       #c3c2b7;
-    --border:         rgba(11,11,11,0.10);
-
-    --series-1: #2a78d6; /* blue   - primary series (e.g. GDD, temp max) */
-    --series-2: #1baf7a; /* aqua   - secondary series (e.g. temp min) */
-    --series-3: #eda100; /* yellow */
-    --series-5: #4a3aa7; /* violet */
-
-    --seq-100: #cde2fb; --seq-450: #2a78d6; --seq-700: #0d366b;
-
-    --div-pos: #2a78d6;  /* surplus */
-    --div-neg: #e34948;  /* deficit */
-    --div-mid: #f0efec;
-
-    --status-good:     #0ca30c;
-    --status-warning:  #fab219;
-    --status-serious:  #ec835a;
-    --status-critical: #d03b3b;
-
-    --radius: 10px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --surface-1:      #1a1a19;
-      --page-plane:     #0d0d0d;
-      --text-primary:   #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted:     #898781;
-      --gridline:       #2c2c2a;
-      --baseline:       #383835;
-      --border:         rgba(255,255,255,0.10);
-
-      --series-1: #3987e5;
-      --series-2: #199e70;
-      --series-3: #c98500;
-      --series-5: #9085e9;
-
-      --div-pos: #3987e5;
-      --div-neg: #e66767;
-      --div-mid: #383835;
-
-      --status-good:     #0ca30c;
-      --status-warning:  #fab219;
-      --status-serious:  #ec835a;
-      --status-critical: #d03b3b;
-    }
-  }
-
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0;
-    background: var(--page-plane);
-    color: var(--text-primary);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  body { padding: 20px 16px 60px; }
-  .wrap { max-width: 1180px; margin: 0 auto; }
-
-  header.app-header {
-    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
-    gap: 12px; margin-bottom: 20px;
-  }
-  header.app-header h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
-  header.app-header p.sub { margin: 0; color: var(--text-secondary); font-size: 14px; }
-
-  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  select {
-    font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
-    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
-  }
-  .updated-badge { font-size: 12px; color: var(--text-muted); }
-
-  .card {
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px; margin-bottom: 16px;
-  }
-  .card h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
-  .card h2 .unit { color: var(--text-muted); font-weight: 400; }
-  .card-foot { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
-
-  .kpi-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px; margin-bottom: 16px;
-  }
-  .stat-tile {
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 14px 16px;
-  }
-  .stat-tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
-  .stat-tile .value { font-size: 26px; font-weight: 650; line-height: 1.1; }
-  .stat-tile .value .unit { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
-  .stat-tile .foot { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
-
-  .badge {
-    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
-    padding: 3px 9px; border-radius: 999px; border: 1px solid transparent;
-  }
-  .badge .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-  .badge.good { color: var(--status-good); border-color: var(--status-good); }
-  .badge.good .dot { background: var(--status-good); }
-  .badge.warning { color: #8a5c00; border-color: var(--status-warning); }
-  .badge.warning .dot { background: var(--status-warning); }
-  .badge.serious { color: #9a3f1e; border-color: var(--status-serious); }
-  .badge.serious .dot { background: var(--status-serious); }
-  .badge.neutral { color: var(--text-secondary); border-color: var(--border); }
-  .badge.neutral .dot { background: var(--text-muted); }
-
-  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
-
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
-  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
-  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-  .legend .line-swatch { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
-
-  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
-  .chart-tooltip {
-    position: fixed; pointer-events: none; z-index: 50; background: var(--text-primary);
-    color: var(--surface-1); font-size: 12px; padding: 6px 9px; border-radius: 6px;
-    line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,0.2); white-space: nowrap; display: none;
-  }
-
-  .table-toggle {
-    background: none; border: none; color: var(--text-secondary); font-size: 12px;
-    text-decoration: underline; cursor: pointer; padding: 0; margin-top: 8px;
-  }
-  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; display: none; }
-  table.data-table.shown { display: table; }
-  table.data-table th, table.data-table td {
-    text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--gridline);
-    font-variant-numeric: tabular-nums;
-  }
-  table.data-table th:first-child, table.data-table td:first-child { text-align: left; font-variant-numeric: normal; }
-  table.data-table th { color: var(--text-secondary); font-weight: 600; }
-
-  .forecast-table-wrap { overflow-x: auto; }
-  table.forecast-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
-  table.forecast-table th, table.forecast-table td {
-    text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--gridline);
-    font-variant-numeric: tabular-nums;
-  }
-  table.forecast-table th:first-child, table.forecast-table td:first-child { text-align: left; font-variant-numeric: normal; }
-  table.forecast-table th { color: var(--text-secondary); font-weight: 600; font-size: 12px; }
-
-  .flood-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-  .empty-note { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
-
-  footer.app-footer {
-    margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--gridline);
-    font-size: 12px; color: var(--text-muted); line-height: 1.7;
-  }
-  footer.app-footer a { color: var(--text-secondary); }
-
-  .site-errors { font-size: 12px; color: var(--status-serious); margin-top: 4px; }
-</style>
+<link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <div class="wrap">
@@ -181,6 +19,7 @@
       <label for="site-select" style="font-size:13px;color:var(--text-secondary);">Site</label>
       <select id="site-select"></select>
       <span class="updated-badge" id="updated-badge"></span>
+      <a class="nav-link" href="about.html">About &amp; glossary</a>
     </div>
   </header>
 
@@ -188,12 +27,19 @@
 
   <div class="kpi-grid" id="kpi-grid"></div>
 
+  <div class="card">
+    <h2>Turf advisor <span class="unit">&mdash; today's recommendations</span></h2>
+    <div id="advisor-list"></div>
+    <div class="card-foot">Rules-based guidance from the figures on this page &mdash; see <a href="about.html">About &amp; glossary</a> for how each recommendation is worked out. Not a substitute for a site inspection.</div>
+  </div>
+
   <div class="charts-grid">
     <div class="card">
-      <h2>Growing Degree Days &mdash; season accumulation <span class="unit">(base <span id="gdd-base">6</span>&deg;C)</span></h2>
+      <h2>Growing Degree Days &mdash; accumulation <span class="unit">(base <span id="gdd-base">6</span>&deg;C)</span></h2>
       <div id="gdd-chart"></div>
       <button class="table-toggle" data-target="gdd-table">View as table</button>
       <div id="gdd-table"></div>
+      <div class="card-foot" id="gdd-history-note"></div>
     </div>
 
     <div class="card">
@@ -235,8 +81,8 @@
 
   <footer class="app-footer">
     <div id="sources-line">Data: Open-Meteo (weather, soil, ET&#8320;), Environment Agency Real-Time Flood-Monitoring API (rainfall, England &amp; Wales only), postcodes.io (geocoding).</div>
-    <div>Dollar spot risk uses the published Smith-Kerns logistic regression model &mdash; a decision aid, not a guarantee. Figures are modelled from weather data, not on-site sensors.</div>
-    <div>Data refreshes on a schedule from a local script &mdash; see the repository for setup. <a href="https://github.com/" id="repo-link" target="_blank" rel="noopener">Source on GitHub</a></div>
+    <div>Dollar spot risk uses the published Smith-Kerns logistic regression model &mdash; a decision aid, not a guarantee. Turf advisor recommendations are rules-based from the same figures. Figures are modelled from weather data, not on-site sensors.</div>
+    <div>Data refreshes on a schedule from a local script &mdash; see the repository for setup. <a href="https://github.com/" id="repo-link" target="_blank" rel="noopener">Source on GitHub</a> &middot; <a href="about.html">About &amp; glossary</a></div>
   </footer>
 
 </div>
@@ -246,6 +92,8 @@
 <script>
 (function () {
   "use strict";
+
+  const HISTORY_CHART_DAYS = 180; // cap long-run trend charts to a readable window
 
   const tooltip = document.getElementById("tooltip");
   function showTooltip(evt, html) {
@@ -462,10 +310,59 @@
     return `<span class="badge ${cls}"><span class="dot"></span>${word}</span>`;
   }
 
+  function severityBadge(sev) {
+    const map = { serious: ["serious", "Action"], warning: ["warning", "Watch"], good: ["good", "On track"] };
+    const pair = map[sev] || ["neutral", sev || "unknown"];
+    return `<span class="badge ${pair[0]}"><span class="dot"></span>${pair[1]}</span>`;
+  }
+
+  // ---------------------------------------------------------------------
+  // Turf advisor recommendations
+  // ---------------------------------------------------------------------
+  function renderAdvisor(recommendations) {
+    const el = document.getElementById("advisor-list");
+    if (!recommendations || !recommendations.length) {
+      el.innerHTML = `<div class="empty-note">No recommendations available for this site yet.</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="advisor-grid">` + recommendations.map(r => `
+      <div class="advisor-item ${r.severity}">
+        <div class="sev-bar"></div>
+        <div class="advisor-body">
+          <h3>${severityBadge(r.severity)} ${r.title}</h3>
+          <p>${r.message}</p>
+        </div>
+      </div>`).join("") + `</div>`;
+  }
+
+  // ---------------------------------------------------------------------
+  // History-vs-now trend badges (e.g. "▲12 vs 7d ago")
+  // ---------------------------------------------------------------------
+  function findHistoryDaysAgo(history, todayIso, daysAgo) {
+    if (!history || !history.length) return null;
+    const target = new Date(todayIso + "T00:00:00");
+    target.setDate(target.getDate() - daysAgo);
+    let best = null, bestDiff = Infinity;
+    history.forEach(h => {
+      const d = new Date(h.date + "T00:00:00");
+      const diff = Math.abs(d - target);
+      if (diff < bestDiff) { bestDiff = diff; best = h; }
+    });
+    // only use it if within 3 days of the target, otherwise there's no real data that far back yet
+    return (best && bestDiff <= 3 * 86400000) ? best : null;
+  }
+
+  function trendNote(history, todayIso, daysAgo, key, digits, unit, formatDelta) {
+    const past = findHistoryDaysAgo(history, todayIso, daysAgo);
+    if (!past || past[key] === null || past[key] === undefined) return "";
+    const pastVal = past[key];
+    return ` <span class="trend-note">${formatDelta(pastVal)} vs ${daysAgo}d ago</span>`;
+  }
+
   // ---------------------------------------------------------------------
   // Render a site's full dashboard
   // ---------------------------------------------------------------------
-  function renderSite(data) {
+  function renderSite(data, history) {
     document.getElementById("site-errors").style.display = "none";
     if (data.errors && data.errors.length) {
       const box = document.getElementById("site-errors");
@@ -478,28 +375,52 @@
       "Updated " + updated.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     document.getElementById("gdd-base").textContent = data.current.gdd_base_temp_c;
 
+    renderAdvisor(data.recommendations);
+
     // ---- KPI tiles ----
     const c = data.current;
+    const todayIso = c.date;
+    const gddTrend = trendNote(history, todayIso, 7, "gdd_cumulative", 0, "", v => {
+      const delta = c.gdd_season_total - v;
+      return (delta >= 0 ? "▲" : "▼") + fmt(Math.abs(delta), 0);
+    });
+    const riskTrend = trendNote(history, todayIso, 7, "dollar_spot_risk_pct", 1, "pp", v => {
+      const delta = c.dollar_spot_risk_pct - v;
+      return (delta >= 0 ? "▲" : "▼") + fmt(Math.abs(delta), 1) + "pp";
+    });
+
     const kpis = [];
     kpis.push(statTile("Temperature today", `${fmt(c.temp_min_c,1)}&ndash;${fmt(c.temp_max_c,1)}<span class="unit">&deg;C</span>`));
-    kpis.push(statTile("GDD (season to date)", `${fmt(c.gdd_season_total,0)}`, `base ${c.gdd_base_temp_c}&deg;C from ${data.config.season_start}`));
-    kpis.push(statTile("Dollar spot risk", `${c.dollar_spot_risk_pct !== null ? fmt(c.dollar_spot_risk_pct,1)+'<span class="unit">%</span>' : '&ndash;'}`, riskBadge(c.dollar_spot_risk_pct, c.dollar_spot_status, c.dollar_spot_threshold_pct)));
+    kpis.push(statTile("GDD (season to date)", `${fmt(c.gdd_season_total,0)}`, `base ${c.gdd_base_temp_c}&deg;C from ${data.config.season_start}${c.gdd_season_total !== null ? gddTrend : ""}`));
+    kpis.push(statTile("Dollar spot risk", `${c.dollar_spot_risk_pct !== null ? fmt(c.dollar_spot_risk_pct,1)+'<span class="unit">%</span>' : '&ndash;'}`, riskBadge(c.dollar_spot_risk_pct, c.dollar_spot_status, c.dollar_spot_threshold_pct) + (c.dollar_spot_risk_pct !== null ? riskTrend : "")));
     kpis.push(statTile("ET&#8320; today", `${fmt(c.et0_today_mm,1)}<span class="unit">mm</span>`, `Rain today: ${fmt(c.precip_today_mm,1)} mm`));
     kpis.push(statTile("7-day water balance", `${c.water_balance_7d.net_mm >= 0 ? "+" : ""}${fmt(c.water_balance_7d.net_mm,1)}<span class="unit">mm</span>`, c.water_balance_7d.state === "deficit" ? "Deficit &mdash; consider irrigation" : "Surplus"));
     kpis.push(statTile("Soil moisture (0-1cm)", c.soil_moisture_0_1cm !== null ? `${fmt(c.soil_moisture_0_1cm * 100,1)}<span class="unit">%</span>` : "&ndash;", c.soil_temperature_0cm_c !== null ? `Soil temp: ${fmt(c.soil_temperature_0cm_c,1)}&deg;C` : ""));
     kpis.push(statTile("Leaf wetness", c.leaf_wetness_pct !== null ? `${fmt(c.leaf_wetness_pct,0)}<span class="unit">%</span>` : "&ndash;", "modelled daily mean probability"));
     document.getElementById("kpi-grid").innerHTML = kpis.join("");
 
+    // ---- Long-run trend base: prefer the accumulated history file over
+    // just this run's daily_history, so charts keep growing across runs.
+    // Falls back cleanly to daily_history if no history file exists yet.
+    const hasHistory = Array.isArray(history) && history.length > 0;
+    const trendBase = hasHistory ? history.slice(-HISTORY_CHART_DAYS) : data.daily_history;
+    const trendSeries = trendBase.concat(data.forecast);
+    const historyNote = document.getElementById("gdd-history-note");
+    if (historyNote) {
+      historyNote.textContent = hasHistory
+        ? `Showing ${trendBase.length} recorded day(s) of history plus forecast.`
+        : `Recorded history starts accumulating from the next scheduled run.`;
+    }
+
     // ---- GDD chart ----
-    const histAndFc = data.daily_history.concat(data.forecast);
-    lineChart(document.getElementById("gdd-chart"), histAndFc,
+    lineChart(document.getElementById("gdd-chart"), trendSeries,
       [{ get: r => r.gdd_cumulative, color: "var(--series-1)", label: "GDD cumulative" }],
       { ariaLabel: "Growing degree days, season accumulation", yDigits: 0, endLabel: true, area: true, minZero: true });
     buildTable(document.getElementById("gdd-table"), ["Date", "GDD/day", "Cumulative"],
-      histAndFc.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.gdd_day,1), fmt(r.gdd_cumulative,1)]));
+      trendSeries.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.gdd_day,1), fmt(r.gdd_cumulative,1)]));
 
     // ---- Dollar spot chart ----
-    const dsRows = histAndFc.filter(r => r.dollar_spot_risk_pct !== undefined);
+    const dsRows = trendSeries.filter(r => r.dollar_spot_risk_pct !== undefined);
     lineChart(document.getElementById("dollarspot-chart"), dsRows,
       [{ get: r => r.dollar_spot_risk_pct, color: "var(--series-5)", label: "Dollar spot risk" }],
       { ariaLabel: "Dollar spot disease risk percentage", yDigits: 0, unit: "%", endLabel: true,
@@ -508,13 +429,13 @@
       dsRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), r.dollar_spot_risk_pct !== null ? fmt(r.dollar_spot_risk_pct,1) : r.dollar_spot_status, fmt(r.dollar_spot_mean_rh_5d,1), fmt(r.dollar_spot_mean_temp_5d_c,1)]));
 
     // ---- Water balance chart (last 14 days incl forecast) ----
-    const wbRows = histAndFc.slice(-14).map(r => ({ date: r.date, net: (r.precip_mm !== null && r.et0_mm !== null) ? (r.precip_mm - r.et0_mm) : null }));
+    const wbRows = trendSeries.slice(-14).map(r => ({ date: r.date, net: (r.precip_mm !== null && r.et0_mm !== null) ? (r.precip_mm - r.et0_mm) : null }));
     divergingBarChart(document.getElementById("waterbalance-chart"), wbRows, r => r.net, { ariaLabel: "Daily water balance, precipitation minus ET0" });
     buildTable(document.getElementById("waterbalance-table"), ["Date", "Net mm"],
       wbRows.map(r => [fmtDate(r.date), r.net !== null ? (r.net >= 0 ? "+" : "") + fmt(r.net,1) : "–"]));
 
     // ---- Temperature chart ----
-    const tRows = data.daily_history.slice(-21).concat(data.forecast);
+    const tRows = trendBase.slice(-21).concat(data.forecast);
     lineChart(document.getElementById("temp-chart"), tRows,
       [{ get: r => r.temp_max_c, color: "var(--series-1)", label: "Max" }, { get: r => r.temp_min_c, color: "var(--series-2)", label: "Min" }],
       { ariaLabel: "Daily maximum and minimum temperature", yDigits: 0, unit: "°C" });
@@ -548,10 +469,16 @@
   // ---------------------------------------------------------------------
   const siteCache = {};
   function loadSite(slug) {
-    if (siteCache[slug]) { renderSite(siteCache[slug]); return; }
-    fetch(`data/sites/${slug}.json?t=${Date.now()}`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(data => { siteCache[slug] = data; renderSite(data); })
+    if (siteCache[slug]) { renderSite(siteCache[slug].data, siteCache[slug].history); return; }
+    const dataP = fetch(`data/sites/${slug}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.json());
+    const histP = fetch(`data/sites/${slug}-history.json?t=${Date.now()}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+    Promise.all([dataP, histP])
+      .then(([data, history]) => {
+        siteCache[slug] = { data, history: Array.isArray(history) ? history : null };
+        renderSite(data, siteCache[slug].history);
+      })
       .catch(err => {
         document.getElementById("site-errors").style.display = "block";
         document.getElementById("site-errors").textContent = "Could not load data for this site: " + err;
@@ -565,7 +492,8 @@
       manifest.sites.forEach(s => {
         const opt = document.createElement("option");
         opt.value = s.slug;
-        opt.textContent = s.name + (s.status !== "ok" ? " ⚠" : "");
+        const marker = s.status !== "ok" ? " ⚠" : (s.top_severity === "serious" ? " 🔴" : (s.top_severity === "warning" ? " 🟡" : ""));
+        opt.textContent = s.name + marker;
         select.appendChild(opt);
       });
       select.addEventListener("change", () => loadSite(select.value));
