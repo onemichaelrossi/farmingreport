@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farming &amp; Turf Weather Dashboard</title>
+<meta name="description" content="Predictive weather, GDD, disease risk and irrigation dashboard for turf and farming sites.">
+<style>
+  :root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+
+    --series-1: #2a78d6; /* blue   - primary series (e.g. GDD, temp max) */
+    --series-2: #1baf7a; /* aqua   - secondary series (e.g. temp min) */
+    --series-3: #eda100; /* yellow */
+    --series-5: #4a3aa7; /* violet */
+
+    --seq-100: #cde2fb; --seq-450: #2a78d6; --seq-700: #0d366b;
+
+    --div-pos: #2a78d6;  /* surplus */
+    --div-neg: #e34948;  /* deficit */
+    --div-mid: #f0efec;
+
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+
+      --series-1: #3987e5;
+      --series-2: #199e70;
+      --series-3: #c98500;
+      --series-5: #9085e9;
+
+      --div-pos: #3987e5;
+      --div-neg: #e66767;
+      --div-mid: #383835;
+
+      --status-good:     #0ca30c;
+      --status-warning:  #fab219;
+      --status-serious:  #ec835a;
+      --status-critical: #d03b3b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px 16px 60px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header.app-header {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 20px;
+  }
+  header.app-header h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  header.app-header p.sub { margin: 0; color: var(--text-secondary); font-size: 14px; }
+
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  select {
+    font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  }
+  .updated-badge { font-size: 12px; color: var(--text-muted); }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
+  .card h2 .unit { color: var(--text-muted); font-weight: 400; }
+  .card-foot { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+  .stat-tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .stat-tile .value { font-size: 26px; font-weight: 650; line-height: 1.1; }
+  .stat-tile .value .unit { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
+  .stat-tile .foot { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px; border: 1px solid transparent;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .badge.good { color: var(--status-good); border-color: var(--status-good); }
+  .badge.good .dot { background: var(--status-good); }
+  .badge.warning { color: #8a5c00; border-color: var(--status-warning); }
+  .badge.warning .dot { background: var(--status-warning); }
+  .badge.serious { color: #9a3f1e; border-color: var(--status-serious); }
+  .badge.serious .dot { background: var(--status-serious); }
+  .badge.neutral { color: var(--text-secondary); border-color: var(--border); }
+  .badge.neutral .dot { background: var(--text-muted); }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
+  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend .line-swatch { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart-tooltip {
+    position: fixed; pointer-events: none; z-index: 50; background: var(--text-primary);
+    color: var(--surface-1); font-size: 12px; padding: 6px 9px; border-radius: 6px;
+    line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,0.2); white-space: nowrap; display: none;
+  }
+
+  .table-toggle {
+    background: none; border: none; color: var(--text-secondary); font-size: 12px;
+    text-decoration: underline; cursor: pointer; padding: 0; margin-top: 8px;
+  }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; display: none; }
+  table.data-table.shown { display: table; }
+  table.data-table th, table.data-table td {
+    text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; font-variant-numeric: normal; }
+  table.data-table th { color: var(--text-secondary); font-weight: 600; }
+
+  .forecast-table-wrap { overflow-x: auto; }
+  table.forecast-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+  table.forecast-table th, table.forecast-table td {
+    text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  table.forecast-table th:first-child, table.forecast-table td:first-child { text-align: left; font-variant-numeric: normal; }
+  table.forecast-table th { color: var(--text-secondary); font-weight: 600; font-size: 12px; }
+
+  .flood-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .empty-note { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+
+  footer.app-footer {
+    margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--gridline);
+    font-size: 12px; color: var(--text-muted); line-height: 1.7;
+  }
+  footer.app-footer a { color: var(--text-secondary); }
+
+  .site-errors { font-size: 12px; color: var(--status-serious); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app-header">
+    <div>
+      <h1>Farming &amp; Turf Weather Dashboard</h1>
+      <p class="sub">Predictive weather, growing degree days, disease risk and irrigation guidance</p>
+    </div>
+    <div class="controls">
+      <label for="site-select" style="font-size:13px;color:var(--text-secondary);">Site</label>
+      <select id="site-select"></select>
+      <span class="updated-badge" id="updated-badge"></span>
+    </div>
+  </header>
+
+  <div id="site-errors" class="site-errors" style="display:none;"></div>
+
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <div class="charts-grid">
+    <div class="card">
+      <h2>Growing Degree Days &mdash; season accumulation <span class="unit">(base <span id="gdd-base">6</span>&deg;C)</span></h2>
+      <div id="gdd-chart"></div>
+      <button class="table-toggle" data-target="gdd-table">View as table</button>
+      <div id="gdd-table"></div>
+    </div>
+
+    <div class="card">
+      <h2>Dollar spot disease risk <span class="unit">(Smith-Kerns model, %)</span></h2>
+      <div id="dollarspot-chart"></div>
+      <button class="table-toggle" data-target="dollarspot-table">View as table</button>
+      <div id="dollarspot-table"></div>
+      <div class="card-foot">Dashed line marks the spray-consideration threshold. Forecast days are shown lighter.</div>
+    </div>
+
+    <div class="card">
+      <h2>7-day water balance <span class="unit">(precipitation &minus; ET&#8320;, mm/day)</span></h2>
+      <div id="waterbalance-chart"></div>
+      <button class="table-toggle" data-target="waterbalance-table">View as table</button>
+      <div id="waterbalance-table"></div>
+    </div>
+
+    <div class="card">
+      <h2>Temperature range <span class="unit">(&deg;C)</span></h2>
+      <div class="legend">
+        <span class="key"><span class="line-swatch" style="background:var(--series-1)"></span>Max</span>
+        <span class="key"><span class="line-swatch" style="background:var(--series-2)"></span>Min</span>
+      </div>
+      <div id="temp-chart"></div>
+      <button class="table-toggle" data-target="temp-table">View as table</button>
+      <div id="temp-table"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>10-day forecast</h2>
+    <div class="forecast-table-wrap" id="forecast-table-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>Rainfall &amp; flood risk <span class="unit">(Environment Agency)</span></h2>
+    <div id="flood-panel"></div>
+  </div>
+
+  <footer class="app-footer">
+    <div id="sources-line">Data: Open-Meteo (weather, soil, ET&#8320;), Environment Agency Real-Time Flood-Monitoring API (rainfall, England &amp; Wales only), postcodes.io (geocoding).</div>
+    <div>Dollar spot risk uses the published Smith-Kerns logistic regression model &mdash; a decision aid, not a guarantee. Figures are modelled from weather data, not on-site sensors.</div>
+    <div>Data refreshes on a schedule from a local script &mdash; see the repository for setup. <a href="https://github.com/" id="repo-link" target="_blank" rel="noopener">Source on GitHub</a></div>
+  </footer>
+
+</div>
+
+<div class="chart-tooltip" id="tooltip"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const tooltip = document.getElementById("tooltip");
+  function showTooltip(evt, html) {
+    tooltip.innerHTML = html;
+    tooltip.style.display = "block";
+    tooltip.style.left = (evt.clientX + 14) + "px";
+    tooltip.style.top = (evt.clientY + 14) + "px";
+  }
+  function hideTooltip() { tooltip.style.display = "none"; }
+
+  function fmt(n, digits) {
+    if (n === null || n === undefined || Number.isNaN(n)) return "–";
+    return Number(n).toFixed(digits === undefined ? 1 : digits);
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  }
+
+  // ---------------------------------------------------------------------
+  // Generic SVG line chart (1-2 series), with hover crosshair + tooltip
+  // ---------------------------------------------------------------------
+  function lineChart(container, rows, series, opts) {
+    opts = opts || {};
+    const W = 560, H = 200, padL = 40, padR = 12, padT = 12, padB = 26;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+
+    const allVals = [];
+    rows.forEach(r => series.forEach(s => { const v = s.get(r); if (v !== null && v !== undefined) allVals.push(v); }));
+    if (opts.thresholdY !== undefined && opts.thresholdY !== null) allVals.push(opts.thresholdY);
+    let vMin = Math.min(0, ...allVals), vMax = Math.max(...allVals, 1);
+    if (vMin === vMax) { vMax = vMin + 1; }
+    const pad = (vMax - vMin) * 0.08;
+    vMin -= pad; vMax += pad;
+    if (opts.minZero) vMin = Math.min(vMin, 0);
+
+    const n = rows.length;
+    const x = i => padL + (n <= 1 ? 0 : (i / (n - 1)) * plotW);
+    const y = v => padT + plotH - ((v - vMin) / (vMax - vMin)) * plotH;
+
+    let svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.ariaLabel || ""}">`;
+
+    // gridlines (4 horizontal)
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const v = vMin + (i / steps) * (vMax - vMin);
+      const yy = y(v);
+      svg += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="var(--gridline)" stroke-width="1"/>`;
+      svg += `<text x="${padL - 6}" y="${yy + 3}" text-anchor="end" font-size="9" fill="var(--text-muted)">${fmt(v, opts.yDigits === undefined ? 0 : opts.yDigits)}</text>`;
+    }
+
+    // baseline
+    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="var(--baseline)" stroke-width="1"/>`;
+
+    // threshold reference line
+    if (opts.thresholdY !== undefined && opts.thresholdY !== null) {
+      const ty = y(opts.thresholdY);
+      svg += `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="var(--status-serious)" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${W - padR}" y="${ty - 4}" text-anchor="end" font-size="9" fill="var(--status-serious)">${opts.thresholdLabel || ""}</text>`;
+    }
+
+    // x-axis labels (sparse)
+    const labelEvery = Math.max(1, Math.ceil(n / 6));
+    for (let i = 0; i < n; i += labelEvery) {
+      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${fmtDate(rows[i].date)}</text>`;
+    }
+
+    // series
+    series.forEach((s) => {
+      let d = "", started = false;
+      const pts = [];
+      rows.forEach((r, i) => {
+        const v = s.get(r);
+        if (v === null || v === undefined) { started = false; return; }
+        const px = x(i), py = y(v);
+        d += (started ? " L " : " M ") + px.toFixed(1) + " " + py.toFixed(1);
+        started = true;
+        pts.push({ i, px, py, v, forecast: r.is_forecast });
+      });
+      if (opts.area) {
+        const areaD = d + ` L ${x(n - 1).toFixed(1)} ${(padT + plotH).toFixed(1)} L ${x(0).toFixed(1)} ${(padT + plotH).toFixed(1)} Z`;
+        svg += `<path d="${areaD}" fill="${s.color}" opacity="0.10" stroke="none"/>`;
+      }
+      // solid portion vs forecast (dashed) split: draw two paths using stroke-dasharray toggling is complex;
+      // simplest robust approach: draw full line solid, then overlay forecast segment dashed in surface-matching tone.
+      svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+      // forecast overlay (dim) for points flagged is_forecast
+      const fIdx = pts.findIndex(p => p.forecast);
+      if (fIdx > 0) {
+        let fd = `M ${pts[fIdx - 1].px.toFixed(1)} ${pts[fIdx - 1].py.toFixed(1)}`;
+        for (let k = fIdx; k < pts.length; k++) fd += ` L ${pts[k].px.toFixed(1)} ${pts[k].py.toFixed(1)}`;
+        svg += `<path d="${fd}" fill="none" stroke="var(--surface-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.55" stroke-dasharray="1,3"/>`;
+      }
+
+      // end marker + label
+      if (pts.length) {
+        const last = pts[pts.length - 1];
+        svg += `<circle cx="${last.px}" cy="${last.py}" r="4" fill="${s.color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+        if (opts.endLabel) {
+          svg += `<text x="${last.px}" y="${last.py - 8}" text-anchor="end" font-size="10" font-weight="600" fill="var(--text-secondary)">${fmt(last.v, opts.yDigits === undefined ? 0 : opts.yDigits)}</text>`;
+        }
+      }
+
+      // invisible hover targets
+      pts.forEach(p => {
+        svg += `<circle cx="${p.px}" cy="${p.py}" r="9" fill="transparent" data-i="${p.i}" data-v="${p.v}" data-color="${s.color}" data-series="${s.label}" class="hover-target"/>`;
+      });
+    });
+
+    svg += `</svg>`;
+    container.innerHTML = svg;
+
+    container.querySelectorAll(".hover-target").forEach(el => {
+      el.addEventListener("mousemove", (evt) => {
+        const i = +el.dataset.i;
+        const row = rows[i];
+        const v = el.dataset.v;
+        showTooltip(evt, `<strong>${fmtDate(row.date)}${row.is_forecast ? " (forecast)" : ""}</strong><br>${el.dataset.series}: ${fmt(v, opts.yDigits === undefined ? 1 : opts.yDigits)}${opts.unit || ""}`);
+      });
+      el.addEventListener("mouseleave", hideTooltip);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Diverging bar chart (single series, +/- around zero)
+  // ---------------------------------------------------------------------
+  function divergingBarChart(container, rows, getVal, opts) {
+    opts = opts || {};
+    const W = 560, H = 200, padL = 34, padR = 12, padT = 12, padB = 26;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const vals = rows.map(getVal).filter(v => v !== null && v !== undefined);
+    let vMax = Math.max(1, ...vals.map(Math.abs));
+    vMax *= 1.15;
+    const n = rows.length;
+    const bandW = plotW / n;
+    const barW = Math.min(24, bandW * 0.6);
+    const zeroY = padT + plotH / 2;
+    const yFor = v => zeroY - (v / vMax) * (plotH / 2);
+
+    let svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.ariaLabel || ""}">`;
+    svg += `<line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="var(--baseline)" stroke-width="1"/>`;
+    svg += `<text x="${padL - 6}" y="${zeroY + 3}" text-anchor="end" font-size="9" fill="var(--text-muted)">0</text>`;
+
+    const labelEvery = Math.max(1, Math.ceil(n / 7));
+    rows.forEach((r, i) => {
+      const v = getVal(r);
+      const cx = padL + bandW * i + bandW / 2;
+      if (v !== null && v !== undefined) {
+        const yv = yFor(v);
+        const top = Math.min(yv, zeroY), h = Math.abs(yv - zeroY);
+        const color = v >= 0 ? "var(--div-pos)" : "var(--div-neg)";
+        const rTop = v >= 0 ? 4 : 0, rBot = v >= 0 ? 0 : 4;
+        svg += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h - 1).toFixed(1)}" rx="${v>=0?4:0}" fill="${color}" data-i="${i}" data-v="${v}" class="hover-target-bar"/>`;
+      }
+      if (i % labelEvery === 0) {
+        svg += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${fmtDate(r.date)}</text>`;
+      }
+    });
+    svg += `</svg>`;
+    container.innerHTML = svg;
+    container.querySelectorAll(".hover-target-bar").forEach(el => {
+      el.addEventListener("mousemove", (evt) => {
+        const i = +el.dataset.i, row = rows[i], v = +el.dataset.v;
+        showTooltip(evt, `<strong>${fmtDate(row.date)}</strong><br>Net: ${v >= 0 ? "+" : ""}${fmt(v, 1)} mm (${v >= 0 ? "surplus" : "deficit"})`);
+      });
+      el.addEventListener("mouseleave", hideTooltip);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Table-view toggle wiring
+  // ---------------------------------------------------------------------
+  document.addEventListener("click", (evt) => {
+    if (evt.target.classList.contains("table-toggle")) {
+      const target = document.getElementById(evt.target.dataset.target);
+      if (target) {
+        const tbl = target.querySelector("table");
+        if (tbl) {
+          tbl.classList.toggle("shown");
+          evt.target.textContent = tbl.classList.contains("shown") ? "Hide table" : "View as table";
+        }
+      }
+    }
+  });
+
+  function buildTable(container, headers, rowsData) {
+    let html = "<table class='data-table'><thead><tr>";
+    headers.forEach(h => html += `<th>${h}</th>`);
+    html += "</tr></thead><tbody>";
+    rowsData.forEach(r => {
+      html += "<tr>";
+      r.forEach(c => html += `<td>${c}</td>`);
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    container.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------------
+  // KPI / stat tiles
+  // ---------------------------------------------------------------------
+  function statTile(label, valueHtml, footHtml) {
+    return `<div class="stat-tile"><div class="label">${label}</div><div class="value">${valueHtml}</div>${footHtml ? `<div class="foot">${footHtml}</div>` : ""}</div>`;
+  }
+
+  function riskBadge(pct, status, threshold) {
+    if (status && status !== "ok") {
+      return `<span class="badge neutral"><span class="dot"></span>${status}</span>`;
+    }
+    if (pct === null || pct === undefined) return `<span class="badge neutral"><span class="dot"></span>no data</span>`;
+    const cls = pct >= threshold ? "serious" : (pct >= threshold * 0.6 ? "warning" : "good");
+    const word = pct >= threshold ? "elevated" : (pct >= threshold * 0.6 ? "watch" : "low");
+    return `<span class="badge ${cls}"><span class="dot"></span>${word}</span>`;
+  }
+
+  // ---------------------------------------------------------------------
+  // Render a site's full dashboard
+  // ---------------------------------------------------------------------
+  function renderSite(data) {
+    document.getElementById("site-errors").style.display = "none";
+    if (data.errors && data.errors.length) {
+      const box = document.getElementById("site-errors");
+      box.style.display = "block";
+      box.innerHTML = "Note: " + data.errors.join(" &middot; ");
+    }
+
+    const updated = new Date(data.generated_at);
+    document.getElementById("updated-badge").textContent =
+      "Updated " + updated.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    document.getElementById("gdd-base").textContent = data.current.gdd_base_temp_c;
+
+    // ---- KPI tiles ----
+    const c = data.current;
+    const kpis = [];
+    kpis.push(statTile("Temperature today", `${fmt(c.temp_min_c,1)}&ndash;${fmt(c.temp_max_c,1)}<span class="unit">&deg;C</span>`));
+    kpis.push(statTile("GDD (season to date)", `${fmt(c.gdd_season_total,0)}`, `base ${c.gdd_base_temp_c}&deg;C from ${data.config.season_start}`));
+    kpis.push(statTile("Dollar spot risk", `${c.dollar_spot_risk_pct !== null ? fmt(c.dollar_spot_risk_pct,1)+'<span class="unit">%</span>' : '&ndash;'}`, riskBadge(c.dollar_spot_risk_pct, c.dollar_spot_status, c.dollar_spot_threshold_pct)));
+    kpis.push(statTile("ET&#8320; today", `${fmt(c.et0_today_mm,1)}<span class="unit">mm</span>`, `Rain today: ${fmt(c.precip_today_mm,1)} mm`));
+    kpis.push(statTile("7-day water balance", `${c.water_balance_7d.net_mm >= 0 ? "+" : ""}${fmt(c.water_balance_7d.net_mm,1)}<span class="unit">mm</span>`, c.water_balance_7d.state === "deficit" ? "Deficit &mdash; consider irrigation" : "Surplus"));
+    kpis.push(statTile("Soil moisture (0-1cm)", c.soil_moisture_0_1cm !== null ? `${fmt(c.soil_moisture_0_1cm * 100,1)}<span class="unit">%</span>` : "&ndash;", c.soil_temperature_0cm_c !== null ? `Soil temp: ${fmt(c.soil_temperature_0cm_c,1)}&deg;C` : ""));
+    kpis.push(statTile("Leaf wetness", c.leaf_wetness_pct !== null ? `${fmt(c.leaf_wetness_pct,0)}<span class="unit">%</span>` : "&ndash;", "modelled daily mean probability"));
+    document.getElementById("kpi-grid").innerHTML = kpis.join("");
+
+    // ---- GDD chart ----
+    const histAndFc = data.daily_history.concat(data.forecast);
+    lineChart(document.getElementById("gdd-chart"), histAndFc,
+      [{ get: r => r.gdd_cumulative, color: "var(--series-1)", label: "GDD cumulative" }],
+      { ariaLabel: "Growing degree days, season accumulation", yDigits: 0, endLabel: true, area: true, minZero: true });
+    buildTable(document.getElementById("gdd-table"), ["Date", "GDD/day", "Cumulative"],
+      histAndFc.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.gdd_day,1), fmt(r.gdd_cumulative,1)]));
+
+    // ---- Dollar spot chart ----
+    const dsRows = histAndFc.filter(r => r.dollar_spot_risk_pct !== undefined);
+    lineChart(document.getElementById("dollarspot-chart"), dsRows,
+      [{ get: r => r.dollar_spot_risk_pct, color: "var(--series-5)", label: "Dollar spot risk" }],
+      { ariaLabel: "Dollar spot disease risk percentage", yDigits: 0, unit: "%", endLabel: true,
+        thresholdY: c.dollar_spot_threshold_pct, thresholdLabel: `Threshold ${c.dollar_spot_threshold_pct}%` });
+    buildTable(document.getElementById("dollarspot-table"), ["Date", "Risk %", "5d mean RH", "5d mean temp"],
+      dsRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), r.dollar_spot_risk_pct !== null ? fmt(r.dollar_spot_risk_pct,1) : r.dollar_spot_status, fmt(r.dollar_spot_mean_rh_5d,1), fmt(r.dollar_spot_mean_temp_5d_c,1)]));
+
+    // ---- Water balance chart (last 14 days incl forecast) ----
+    const wbRows = histAndFc.slice(-14).map(r => ({ date: r.date, net: (r.precip_mm !== null && r.et0_mm !== null) ? (r.precip_mm - r.et0_mm) : null }));
+    divergingBarChart(document.getElementById("waterbalance-chart"), wbRows, r => r.net, { ariaLabel: "Daily water balance, precipitation minus ET0" });
+    buildTable(document.getElementById("waterbalance-table"), ["Date", "Net mm"],
+      wbRows.map(r => [fmtDate(r.date), r.net !== null ? (r.net >= 0 ? "+" : "") + fmt(r.net,1) : "–"]));
+
+    // ---- Temperature chart ----
+    const tRows = data.daily_history.slice(-21).concat(data.forecast);
+    lineChart(document.getElementById("temp-chart"), tRows,
+      [{ get: r => r.temp_max_c, color: "var(--series-1)", label: "Max" }, { get: r => r.temp_min_c, color: "var(--series-2)", label: "Min" }],
+      { ariaLabel: "Daily maximum and minimum temperature", yDigits: 0, unit: "°C" });
+    buildTable(document.getElementById("temp-table"), ["Date", "Max °C", "Min °C"],
+      tRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.temp_max_c,1), fmt(r.temp_min_c,1)]));
+
+    // ---- Forecast table ----
+    let fHtml = `<table class="forecast-table"><thead><tr><th>Date</th><th>Max &deg;C</th><th>Min &deg;C</th><th>Rain mm</th><th>ET&#8320; mm</th><th>Leaf wet %</th><th>Dollar spot</th></tr></thead><tbody>`;
+    data.forecast.forEach(r => {
+      fHtml += `<tr><td>${fmtDate(r.date)}</td><td>${fmt(r.temp_max_c,1)}</td><td>${fmt(r.temp_min_c,1)}</td><td>${fmt(r.precip_mm,1)}</td><td>${fmt(r.et0_mm,1)}</td><td>${r.leaf_wetness_pct !== null ? fmt(r.leaf_wetness_pct,0) : "–"}</td><td>${riskBadge(r.dollar_spot_risk_pct, r.dollar_spot_status, c.dollar_spot_threshold_pct)}</td></tr>`;
+    });
+    fHtml += "</tbody></table>";
+    document.getElementById("forecast-table-wrap").innerHTML = fHtml;
+
+    // ---- Flood panel ----
+    const floodEl = document.getElementById("flood-panel");
+    if (data.flood) {
+      const fl = data.flood;
+      floodEl.innerHTML = `<div class="flood-grid">
+        ${statTile("Nearest station", fl.station_label || fl.station_reference, `${fmt(fl.distance_km,1)} km away`)}
+        ${statTile("Latest reading", fl.latest_reading_mm !== null ? fmt(fl.latest_reading_mm,1) + '<span class="unit">mm</span>' : "&ndash;", fl.latest_reading_time ? new Date(fl.latest_reading_time).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "")}
+        ${statTile("Last 24 hours", fl.rainfall_last_24h_mm !== null ? fmt(fl.rainfall_last_24h_mm,1) + '<span class="unit">mm</span>' : "&ndash;", "rolling total")}
+      </div>`;
+    } else {
+      floodEl.innerHTML = `<div class="empty-note">No Environment Agency rainfall station found nearby (coverage is England &amp; Wales only).</div>`;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Boot: load manifest, populate selector, load first site
+  // ---------------------------------------------------------------------
+  const siteCache = {};
+  function loadSite(slug) {
+    if (siteCache[slug]) { renderSite(siteCache[slug]); return; }
+    fetch(`data/sites/${slug}.json?t=${Date.now()}`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => { siteCache[slug] = data; renderSite(data); })
+      .catch(err => {
+        document.getElementById("site-errors").style.display = "block";
+        document.getElementById("site-errors").textContent = "Could not load data for this site: " + err;
+      });
+  }
+
+  fetch(`data/index.json?t=${Date.now()}`, { cache: "no-store" })
+    .then(r => r.json())
+    .then(manifest => {
+      const select = document.getElementById("site-select");
+      manifest.sites.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.slug;
+        opt.textContent = s.name + (s.status !== "ok" ? " ⚠" : "");
+        select.appendChild(opt);
+      });
+      select.addEventListener("change", () => loadSite(select.value));
+      if (manifest.sites.length) loadSite(manifest.sites[0].slug);
+      else document.getElementById("site-errors").innerHTML = "No sites configured yet.";
+    })
+    .catch(err => {
+      document.getElementById("site-errors").style.display = "block";
+      document.getElementById("site-errors").textContent = "Could not load the site list (data/index.json): " + err;
+    });
+
+  // Best-effort: fill the footer repo link from the page's own location if served from GitHub Pages
+  try {
+    const host = location.hostname; // e.g. username.github.io
+    const path = location.pathname.split("/").filter(Boolean); // [repo, ...]
+    if (host.endsWith("github.io") && path.length) {
+      const user = host.split(".")[0];
+      document.getElementById("repo-link").href = `https://github.com/${user}/${path[0]}`;
+    }
+  } catch (e) { /* non-critical */ }
+})();
+</script>
+</body>
+</html>
