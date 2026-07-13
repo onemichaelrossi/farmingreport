@@ -9,6 +9,8 @@ tidier repo -- it's dev-only and never used by the dashboard or the schedule.
 import json
 import sys
 import os
+import shutil
+import tempfile
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -164,6 +166,16 @@ def main():
 
     assert data["current"]["leaf_wetness_pct"] is not None
 
+    # ---- advisor recommendations ----
+    assert "recommendations" in data and len(data["recommendations"]) >= 1, \
+        "build_recommendations should always return at least one item"
+    for rec in data["recommendations"]:
+        assert rec["severity"] in ("good", "warning", "serious"), f"unexpected severity: {rec['severity']}"
+        assert rec["title"] and rec["message"], "each recommendation needs a title and message"
+    assert data["top_severity"] in ("good", "warning", "serious")
+    sev_ranks = [fw.SEVERITY_RANK[r["severity"]] for r in data["recommendations"]]
+    assert sev_ranks == sorted(sev_ranks, reverse=True), "recommendations should be sorted most-severe first"
+
     out_path = os.path.join(os.path.dirname(__file__), "_test_output_sample.json")
     with open(out_path, "w") as f:
         json.dump(data, f, indent=2)
@@ -175,7 +187,102 @@ def main():
     print(f"Water balance 7d: {wb}")
     print(f"Flood: {data['flood']}")
     print(f"Errors: {data['errors']}")
+    print(f"Top severity: {data['top_severity']}")
+    for rec in data["recommendations"]:
+        print(f"  [{rec['severity']}] {rec['title']}")
+
+    return data
+
+
+def test_build_recommendations_direct():
+    """Exercise build_recommendations() directly against hand-picked figures
+    so each severity branch is provably reachable, not just whatever the
+    fixture happens to produce."""
+    daily_history = [{"gdd_day": 12.0}] * 7
+
+    # Serious dollar spot + serious water deficit + frost + heat in one go
+    current = {
+        "dollar_spot_risk_pct": 30, "dollar_spot_threshold_pct": 20,
+        "water_balance_7d": {"net_mm": -30}, "soil_moisture_0_1cm": 0.05,
+        "leaf_wetness_pct": 70, "temp_min_c": 1.0, "temp_max_c": 29.0,
+    }
+    recs = fw.build_recommendations(current, {"rainfall_last_24h_mm": 20}, daily_history)
+    ids = {r["id"] for r in recs}
+    assert "dollar_spot" in ids and "water_deficit" in ids and "soil_dry" in ids
+    assert "frost" in ids and "heat" in ids and "heavy_rain" in ids and "growth_fast" in ids
+    assert fw.top_severity_of(recs) == "serious"
+
+    # Calm conditions -> falls through to the all-clear fallback
+    calm = {
+        "dollar_spot_risk_pct": 2, "dollar_spot_threshold_pct": 20,
+        "water_balance_7d": {"net_mm": 2}, "soil_moisture_0_1cm": 0.25,
+        "leaf_wetness_pct": 10, "temp_min_c": 10.0, "temp_max_c": 18.0,
+    }
+    recs2 = fw.build_recommendations(calm, None, [{"gdd_day": 5.0}] * 7)
+    assert fw.top_severity_of(recs2) == "good"
+    assert all(r["severity"] == "good" for r in recs2)
+
+    print("test_build_recommendations_direct PASSED")
+
+
+def test_history_upsert(sample_data: dict):
+    """update_history() should backfill on first run, upsert (not duplicate)
+    a same-day re-run, and trim to HISTORY_MAX_DAYS."""
+    tmp_dir = tempfile.mkdtemp(prefix="farmingreport-history-test-")
+    try:
+        slug = sample_data["site"]["slug"]
+
+        history1 = fw.update_history(slug, sample_data, history_dir=tmp_dir)
+        assert len(history1) == len(sample_data["daily_history"]), \
+            "first run should backfill exactly the days in daily_history"
+        dates1 = [h["date"] for h in history1]
+        assert dates1 == sorted(dates1), "history should be date-sorted"
+        assert dates1 == sorted(set(dates1)), "history should have no duplicate dates"
+        assert history1[-1]["top_severity"] == sample_data["top_severity"], \
+            "today's record should carry the real advisor verdict, not the backfill placeholder"
+
+        # re-run "same day" with a tweaked figure -- should upsert in place, not append
+        sample_data2 = json.loads(json.dumps(sample_data))
+        sample_data2["daily_history"][-1]["dollar_spot_risk_pct"] = 99.0
+        history2 = fw.update_history(slug, sample_data2, history_dir=tmp_dir)
+        assert len(history2) == len(history1), "same-day re-run should not add a new row"
+        assert history2[-1]["dollar_spot_risk_pct"] == 99.0, "same-day re-run should overwrite today's row"
+
+        print("test_history_upsert PASSED")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # trimming -- a fresh, empty history dir so the whole long list backfills
+    # in one go (an existing history would only upsert "today", not backfill)
+    trim_dir = tempfile.mkdtemp(prefix="farmingreport-history-trim-test-")
+    try:
+        big = json.loads(json.dumps(sample_data))
+        base_date = datetime.strptime(big["daily_history"][-1]["date"], "%Y-%m-%d").date()
+        long_history = []
+        for i in range(fw.HISTORY_MAX_DAYS + 50):
+            row = dict(big["daily_history"][-1])
+            row["date"] = (base_date - timedelta(days=fw.HISTORY_MAX_DAYS + 50 - i)).isoformat()
+            long_history.append(row)
+        big["daily_history"] = long_history
+        history3 = fw.update_history(slug, big, history_dir=trim_dir)
+        assert len(history3) == fw.HISTORY_MAX_DAYS, \
+            f"history should be trimmed to HISTORY_MAX_DAYS, got {len(history3)}"
+        dates3 = [h["date"] for h in history3]
+        assert dates3 == sorted(dates3) and len(set(dates3)) == len(dates3)
+
+        # file actually on disk and valid JSON
+        path = fw.history_path(slug, trim_dir)
+        with open(path) as f:
+            on_disk = json.load(f)
+        assert on_disk == history3
+
+        print("test_history_trim PASSED")
+    finally:
+        shutil.rmtree(trim_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
-    main()
+    data = main()
+    test_build_recommendations_direct()
+    test_history_upsert(data)
+    print("ALL TESTS PASSED")
