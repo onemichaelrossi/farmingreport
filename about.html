@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About &amp; glossary — Farming &amp; Turf Weather Dashboard</title>
+<meta name="description" content="How the Farming & Turf Weather Dashboard's advisor, growing degree days, disease risk and history charts are calculated, plus a glossary of terms.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app-header">
+    <div>
+      <h1>About &amp; glossary</h1>
+      <p class="sub">How the figures, charts and turf advisor recommendations on the dashboard are worked out</p>
+    </div>
+    <div class="controls">
+      <a class="nav-link" href="index.html">&larr; Back to dashboard</a>
+    </div>
+  </header>
+
+  <div class="card about-prose">
+    <h2>What this is</h2>
+    <p>This dashboard is a predictive weather and turf-management aid for one or more UK sites, built from free public data. Each site has a postcode; a script running on a schedule pulls weather, soil and rainfall data, works out a handful of turf-relevant figures, generates plain-English recommendations from them, and publishes the results here as a static page &mdash; no accounts, server or build step needed to view it.</p>
+    <p>It is a decision aid, not a replacement for walking the ground. All figures are modelled from weather data rather than measured with on-site sensors, and the advisor's recommendations are simple rules applied to those figures &mdash; always confirm anything spray- or irrigation-related with a visual inspection first.</p>
+  </div>
+
+  <div class="card about-prose">
+    <h2>How the turf advisor works</h2>
+    <p>The "Turf advisor" panel on the dashboard is a <strong>rules-based</strong> system, not a machine-learning model: every recommendation comes from comparing today's figures against a fixed, documented threshold, so the advice is explainable rather than a black box. Each recommendation carries a severity:</p>
+    <table class="threshold-table">
+      <thead><tr><th>Severity</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge good"><span class="dot"></span>On track</span></td><td>Figure is within a normal range &mdash; routine monitoring is enough.</td></tr>
+        <tr><td><span class="badge warning"><span class="dot"></span>Watch</span></td><td>Figure is approaching a threshold &mdash; worth keeping an eye on over the next few days.</td></tr>
+        <tr><td><span class="badge serious"><span class="dot"></span>Action</span></td><td>Figure has crossed a threshold generally associated with a management decision (irrigate, inspect for disease, avoid traffic, etc).</td></tr>
+      </tbody>
+    </table>
+    <p>The thresholds currently used are:</p>
+    <table class="threshold-table">
+      <thead><tr><th>Check</th><th>Watch</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>Dollar spot risk</td><td>&ge; 60% of the site's threshold (default 20%)</td><td>&ge; the site's threshold</td></tr>
+        <tr><td>7-day water balance</td><td>&le; &minus;10mm</td><td>&le; &minus;25mm</td></tr>
+        <tr><td>Water surplus (soft ground)</td><td>&ge; +20mm over 7 days</td><td>&mdash;</td></tr>
+        <tr><td>Topsoil moisture (0&ndash;1cm)</td><td>&lt; 12% (dry) or &gt; 40% (saturated)</td><td>&mdash;</td></tr>
+        <tr><td>Leaf wetness probability</td><td>&ge; 60%</td><td>&mdash;</td></tr>
+        <tr><td>Overnight minimum temperature</td><td>&le; 2&deg;C (frost risk)</td><td>&mdash;</td></tr>
+        <tr><td>Daytime maximum temperature</td><td>&ge; 28&deg;C (heat stress)</td><td>&mdash;</td></tr>
+        <tr><td>Rainfall in the last 24 hours</td><td>&ge; 15mm</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+    <p>Growth-rate guidance (mowing frequency, whether to hold off feeding) comes from the trailing 7-day average Growing Degree Days per day: &ge; 10/day is treated as active growth, &le; 4/day as slow growth. If nothing else is flagged, the advisor shows an "all clear" note rather than an empty panel.</p>
+  </div>
+
+  <div class="card about-prose">
+    <h2>Glossary</h2>
+    <dl class="glossary">
+      <dt>Growing Degree Days (GDD)</dt>
+      <dd>A running total of daily heat accumulation above a base temperature, used across agriculture and turf management to predict plant growth stages, mowing frequency and treatment timing more reliably than the calendar date alone. See the formula below.</dd>
+
+      <dt>Dollar spot</dt>
+      <dd>A common fungal turf disease (<em>Clarireedia</em> spp.) that produces small, straw-coloured, sunken lesions, particularly in cool-season grasses under warm, humid conditions with prolonged leaf wetness.</dd>
+
+      <dt>Smith-Kerns model</dt>
+      <dd>A published logistic regression model that estimates the daily probability of dollar spot outbreak from the 5-day trailing average relative humidity and air temperature. Widely used in turf management as a spray-timing decision aid.</dd>
+
+      <dt>ET&#8320; (reference evapotranspiration)</dt>
+      <dd>The modelled amount of water (in mm) that a well-watered reference surface would lose to evaporation and plant transpiration in a day. Used alongside rainfall to estimate whether a site is running a moisture deficit or surplus.</dd>
+
+      <dt>7-day water balance</dt>
+      <dd>Total rainfall minus total ET&#8320; over the trailing 7 days. A negative ("deficit") figure means more moisture has left than has fallen recently &mdash; a signal to consider irrigation. It is a simple running total, not a soil-moisture measurement in its own right.</dd>
+
+      <dt>Soil moisture (0&ndash;1cm)</dt>
+      <dd>Open-Meteo's modelled volumetric soil water content in the top 1cm, shown as a percentage. This is a model estimate, not a probe reading.</dd>
+
+      <dt>Leaf wetness probability</dt>
+      <dd>Open-Meteo's modelled daily-mean probability that leaf surfaces are wet (from dew, rain or humidity). Extended leaf wetness is one of the main drivers of fungal disease pressure.</dd>
+
+      <dt>Forecast vs actual</dt>
+      <dd>On the charts, solid lines are actual recorded/modelled days and the last dashed, dimmer segment is the forecast. Table views mark forecast rows with "(f/c)".</dd>
+
+      <dt>Analysis history</dt>
+      <dd>A compact daily snapshot (temperature, GDD, dollar spot risk, water balance, and that day's advisor severity) saved every time the fetch script runs, independent of whatever history window the weather APIs themselves return. This is what lets the trend charts keep growing over the lifetime of the site rather than being capped to a short rolling window. See below for details.</dd>
+
+      <dt>Flood/rainfall station</dt>
+      <dd>The nearest Environment Agency real-time rainfall gauge to the site (England &amp; Wales only). Shown for situational awareness, not as a formal flood warning.</dd>
+    </dl>
+  </div>
+
+  <div class="card about-prose">
+    <h2>Techniques &amp; calculations</h2>
+    <p><strong>Growing Degree Days</strong> are calculated per day as:</p>
+    <p><code>GDD(day) = max(0, ((T_max + T_min) / 2) &minus; T_base)</code></p>
+    <p>where <code>T_base</code> defaults to 6&deg;C (a common cool-season turf/grass baseline, configurable per site) and the daily values are summed from the season start date (default 1 January) to give the season-to-date total shown on the dashboard.</p>
+
+    <p><strong>Dollar spot risk</strong> uses the published Smith-Kerns logistic regression model:</p>
+    <p><code>logit = &minus;11.4041 + (0.0894 &times; RH5) + (0.1932 &times; T5)</code><br>
+    <code>risk % = e<sup>logit</sup> / (1 + e<sup>logit</sup>) &times; 100</code></p>
+    <p>where <code>RH5</code> and <code>T5</code> are the trailing 5-day mean relative humidity (%) and air temperature (&deg;C). The model is only considered active when the 5-day mean temperature is between 10&deg;C and 35&deg;C; outside that range there's insufficient basis for a risk estimate and the dashboard shows "&ndash;" instead of a number.</p>
+
+    <p><strong>Water balance</strong> is simply <code>&Sigma; precipitation &minus; &Sigma; ET&#8320;</code> over the trailing 7 days.</p>
+
+    <p>All weather, soil-moisture, soil-temperature and leaf-wetness figures are Open-Meteo model outputs for the site's geocoded coordinates, not physical sensor readings at the site itself.</p>
+  </div>
+
+  <div class="card about-prose">
+    <h2>Analysis history in detail</h2>
+    <p>Every time the fetch script runs, it writes a compact snapshot for that day &mdash; temperature, GDD, dollar spot risk, water balance, soil moisture and leaf wetness, plus that day's overall advisor severity &mdash; into <code>data/sites/&lt;site&gt;-history.json</code>. Each run <em>upserts</em> by date: re-running the script the same day updates that day's row rather than duplicating it, and a new day appends a new row. The very first run for a site backfills whatever history the weather API already returned, so the trend charts aren't a single dot from day one. The file is capped to the most recent 730 days to keep it a sane size after years of daily runs.</p>
+    <p>The dashboard's Growing Degree Days, dollar spot risk and temperature charts read from this file (falling back to the current run's own data if no history file exists yet), so those charts genuinely show "then vs now" as the schedule keeps running &mdash; not just whatever window the upstream weather API happens to return on a given day.</p>
+  </div>
+
+  <div class="card about-prose">
+    <h2>Data sources &amp; licensing</h2>
+    <p><a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> &mdash; weather, soil and ET&#8320; data (free, non-commercial use).</p>
+    <p><a href="https://environment.data.gov.uk/flood-monitoring/doc/reference" target="_blank" rel="noopener">Environment Agency Real-Time Flood-Monitoring API</a> &mdash; Open Government Licence v3. Coverage is England &amp; Wales only; sites elsewhere in the UK will show no rainfall-station data.</p>
+    <p><a href="https://postcodes.io/" target="_blank" rel="noopener">postcodes.io</a> &mdash; UK postcode geocoding (open data).</p>
+  </div>
+
+  <footer class="app-footer">
+    <div>Dollar spot risk uses the published Smith-Kerns logistic regression model &mdash; a decision aid, not a guarantee. Turf advisor recommendations are rules-based from the same figures. Figures are modelled from weather data, not on-site sensors.</div>
+    <div><a href="https://github.com/" id="repo-link" target="_blank" rel="noopener">Source on GitHub</a> &middot; <a href="index.html">&larr; Back to dashboard</a></div>
+  </footer>
+
+</div>
+
+<script>
+  // Best-effort: fill the footer repo link from the page's own location if served from GitHub Pages
+  try {
+    const host = location.hostname; // e.g. username.github.io
+    const path = location.pathname.split("/").filter(Boolean); // [repo, ...]
+    if (host.endsWith("github.io") && path.length) {
+      const user = host.split(".")[0];
+      document.getElementById("repo-link").href = `https://github.com/${user}/${path[0]}`;
+    }
+  } catch (e) { /* non-critical */ }
+</script>
+</body>
+</html>
