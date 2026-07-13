@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-07-13T08:02:52Z",
+  "sites": [
+    {
+      "name": "Michael's House",
+      "slug": "michaels-house",
+      "postcode": "SK7 1AT",
+      "admin_district": "Stockport",
+      "last_updated": "2026-07-13T08:02:52Z",
+      "status": "ok",
+      "errors": [],
+      "gdd_season_total": 925.3,
+      "dollar_spot_risk_pct": 15.3
+    }
+  ]
+}
