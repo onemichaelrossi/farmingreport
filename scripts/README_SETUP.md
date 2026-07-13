@@ -59,8 +59,8 @@ Edit `config\sites.json`. Only `name` and `postcode` are required:
 ```json
 {
   "sites": [
-    { "name": "Michael's House", "postcode": "SK7 1AT" },
-    { "name": "North Field", "postcode": "SK9 4AA", "gdd_base_temp_c": 6, "season_start": "03-01" }
+    { "name": "Wilberfoss", "postcode": "YO41 5YZ" },
+    { "name": "Hougham", "postcode": "NG32 2JD", "gdd_base_temp_c": 6, "season_start": "03-01" }
   ]
 }
 ```
