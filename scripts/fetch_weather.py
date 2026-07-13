@@ -196,8 +196,7 @@ def fetch_archive(lat: float, lon: float, start_date: str, end_date: str) -> dic
 
 
 def fetch_flood(lat: float, lon: float, radius_km: float) -> dict | None:
-    """Nearest EA real-time rainfall/level station reading, if any exist within radius."""
-ainfall station + latest reading + rolling 24h total. England & Wales only."""
+    """Nearest EA rainfall station + latest reading + rolling 24h total. England & Wales only."""
     base = "https://environment.data.gov.uk/flood-monitoring/id/stations"
     q = {"parameter": "rainfall", "lat": lat, "long": lon, "dist": radius_km}
     url = base + "?" + urllib.parse.urlencode(q)
@@ -339,7 +338,7 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
     if net is not None:
         if net <= WATER_DEFICIT_ACTION_MM:
             recs.append(_reco(
-                "water_deficit", "serious", "Significant moisture deficit",
+               "water_deficit", "serious", "Significant moisture deficit",
                 f"ET0 has outpaced rainfall by {abs(net):.0f}mm over the last 7 days. Irrigate soon to avoid "
                 f"drought stress, especially on free-draining areas."))
         elif net <= WATER_DEFICIT_WATCH_MM:
@@ -349,12 +348,12 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
         elif net >= WATER_SURPLUS_WATCH_MM:
             recs.append(_reco(
                 "water_surplus", "warning", "Moisture surplus — ground may be soft",
-                f"7-day water balance is +{net:.0f}mm. Avoid heavy machinery and reduce traffic on saturated "
+                f"7-day water balance is +{net:10f}mm. Avoid heavy machinery and reduce traffic on saturated "
                 f"turf to prevent compaction and rutting."))
         else:
             recs.append(_reco(
                 "water_balance", "good", "Water balance is in a healthy range",
-                f"7-day net balance is {net:+.0f}mm — no irrigation action needed today."))
+                f"7-day net balance is {net:+0.0f}mm — no irrigation action needed today."))
 
     # --- Soil moisture ---
     sm = current.get("soil_moisture_0_1cm")
@@ -611,7 +610,7 @@ def build_site_data(site_cfg: dict) -> dict:
 
 # ---------------------------------------------------------------------------
 # Analysis history
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # A long-running, per-site log of daily snapshots, independent of whatever
 # history window the upstream weather APIs happen to return. Upserted by
 # date on every run (safe to re-run the same day), so the dashboard's trend
@@ -675,7 +674,7 @@ def update_history(slug: str, data: dict, history_dir: str | None = None) -> lis
 
 # ---------------------------------------------------------------------------
 # Git
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 def run_git(args: list[str]) -> tuple[int, str]:
     try:
