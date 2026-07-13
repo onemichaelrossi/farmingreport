@@ -1,0 +1,14 @@
+{
+  "_comment": "Add or remove sites here. 'name' and 'postcode' are required. slug/gdd_base_temp_c/season_start/dollar_spot_threshold_pct/flood_search_radius_km are optional -- sensible defaults are used if omitted. After editing, the next scheduled run of fetch_weather.py will pick up the change automatically.",
+  "sites": [
+    {
+      "name": "Michael's House",
+      "postcode": "SK7 1AT",
+      "slug": "michaels-house",
+      "gdd_base_temp_c": 6,
+      "season_start": "01-01",
+      "dollar_spot_threshold_pct": 20,
+      "flood_search_radius_km": 15
+    }
+  ]
+}
