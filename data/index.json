@@ -10,7 +10,8 @@
       "status": "ok",
       "errors": [],
       "gdd_season_total": 925.3,
-      "dollar_spot_risk_pct": 15.3
+      "dollar_spot_risk_pct": 15.3,
+      "top_severity": "serious"
     }
   ]
 }
