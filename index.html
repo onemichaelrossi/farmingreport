@@ -498,7 +498,11 @@
       });
       select.addEventListener("change", () => loadSite(select.value));
       if (manifest.sites.length) loadSite(manifest.sites[0].slug);
-      else document.getElementById("site-errors").innerHTML = "No sites configured yet.";
+      else {
+        const el = document.getElementById("site-errors");
+        el.style.display = "block";
+        el.innerHTML = "No sites configured yet.";
+      }
     })
     .catch(err => {
       document.getElementById("site-errors").style.display = "block";
