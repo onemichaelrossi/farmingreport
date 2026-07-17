@@ -8,7 +8,7 @@
     "admin_district": "South Kesteven",
     "region": "East Midlands"
   },
-  "generated_at": "2026-07-17T13:03:03+00:00",
+  "generated_at": "2026-07-17T13:19:08+00:00",
   "config": {
     "gdd_base_temp_c": 6.0,
     "season_start": "2026-01-01",
@@ -2680,20 +2680,20 @@
     },
     {
       "date": "2026-07-19",
-      "temp_max_c": 22.2,
+      "temp_max_c": 22.3,
       "temp_min_c": 10.1,
       "precip_mm": 0.0,
       "et0_mm": 4.94,
-      "mean_rh_pct": 53.1,
-      "mean_temp_c": 16.62,
-      "leaf_wetness_pct": 30,
+      "mean_rh_pct": 52.3,
+      "mean_temp_c": 16.72,
+      "leaf_wetness_pct": 29,
       "is_forecast": true,
-      "gdd_day": 10.15,
-      "gdd_cumulative": 1094.7,
-      "dollar_spot_risk_pct": 9.3,
+      "gdd_day": 10.2,
+      "gdd_cumulative": 1094.8,
+      "dollar_spot_risk_pct": 9.2,
       "dollar_spot_status": "ok",
-      "dollar_spot_mean_rh_5d": 63.1,
-      "dollar_spot_mean_temp_5d_c": 18.0
+      "dollar_spot_mean_rh_5d": 63.0,
+      "dollar_spot_mean_temp_5d_c": 18.1
     },
     {
       "date": "2026-07-20",
@@ -2706,10 +2706,10 @@
       "leaf_wetness_pct": 31,
       "is_forecast": true,
       "gdd_day": 10.8,
-      "gdd_cumulative": 1105.5,
-      "dollar_spot_risk_pct": 7.9,
+      "gdd_cumulative": 1105.6,
+      "dollar_spot_risk_pct": 7.8,
       "dollar_spot_status": "ok",
-      "dollar_spot_mean_rh_5d": 61.7,
+      "dollar_spot_mean_rh_5d": 61.5,
       "dollar_spot_mean_temp_5d_c": 17.8
     },
     {
@@ -2723,11 +2723,11 @@
       "leaf_wetness_pct": 41,
       "is_forecast": true,
       "gdd_day": 10.7,
-      "gdd_cumulative": 1116.2,
-      "dollar_spot_risk_pct": 7.4,
+      "gdd_cumulative": 1116.3,
+      "dollar_spot_risk_pct": 7.3,
       "dollar_spot_status": "ok",
-      "dollar_spot_mean_rh_5d": 61.6,
-      "dollar_spot_mean_temp_5d_c": 17.4
+      "dollar_spot_mean_rh_5d": 61.4,
+      "dollar_spot_mean_temp_5d_c": 17.5
     },
     {
       "date": "2026-07-22",
@@ -2741,9 +2741,9 @@
       "is_forecast": true,
       "gdd_day": 12.25,
       "gdd_cumulative": 1128.5,
-      "dollar_spot_risk_pct": 7.2,
+      "dollar_spot_risk_pct": 7.1,
       "dollar_spot_status": "ok",
-      "dollar_spot_mean_rh_5d": 61.4,
+      "dollar_spot_mean_rh_5d": 61.2,
       "dollar_spot_mean_temp_5d_c": 17.4
     },
     {
@@ -2757,10 +2757,10 @@
       "leaf_wetness_pct": 40,
       "is_forecast": true,
       "gdd_day": 10.05,
-      "gdd_cumulative": 1138.5,
-      "dollar_spot_risk_pct": 7.8,
+      "gdd_cumulative": 1138.6,
+      "dollar_spot_risk_pct": 7.7,
       "dollar_spot_status": "ok",
-      "dollar_spot_mean_rh_5d": 62.1,
+      "dollar_spot_mean_rh_5d": 62.0,
       "dollar_spot_mean_temp_5d_c": 17.5
     },
     {
@@ -2791,7 +2791,7 @@
       "leaf_wetness_pct": 22,
       "is_forecast": true,
       "gdd_day": 13.65,
-      "gdd_cumulative": 1164.7,
+      "gdd_cumulative": 1164.8,
       "dollar_spot_risk_pct": 9.7,
       "dollar_spot_status": "ok",
       "dollar_spot_mean_rh_5d": 63.0,
@@ -2808,7 +2808,7 @@
       "leaf_wetness_pct": 26,
       "is_forecast": true,
       "gdd_day": 13.2,
-      "gdd_cumulative": 1177.9,
+      "gdd_cumulative": 1178.0,
       "dollar_spot_risk_pct": 10.0,
       "dollar_spot_status": "ok",
       "dollar_spot_mean_rh_5d": 62.9,
