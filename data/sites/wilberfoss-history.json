@@ -2974,5 +2974,24 @@
     "dollar_spot_mean_temp_5d_c": 18.2,
     "soil_moisture_0_1cm": 0.108,
     "top_severity": "serious"
+  },
+  {
+    "date": "2026-07-17",
+    "temp_max_c": 20.5,
+    "temp_min_c": 10.5,
+    "precip_mm": 0.0,
+    "et0_mm": 3.42,
+    "mean_rh_pct": 73.7,
+    "mean_temp_c": 16.02,
+    "leaf_wetness_pct": 47,
+    "is_forecast": false,
+    "gdd_day": 9.5,
+    "gdd_cumulative": 912.5,
+    "dollar_spot_risk_pct": 15.8,
+    "dollar_spot_status": "ok",
+    "dollar_spot_mean_rh_5d": 71.8,
+    "dollar_spot_mean_temp_5d_c": 17.2,
+    "soil_moisture_0_1cm": 0.115,
+    "top_severity": "serious"
   }
 ]
