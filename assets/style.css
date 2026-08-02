@@ -15,7 +15,9 @@
   --series-1: #2a78d6; /* blue   - primary series (e.g. GDD, temp max) */
   --series-2: #1baf7a; /* aqua   - secondary series (e.g. temp min) */
   --series-3: #eda100; /* yellow */
-  --series-5: #4a3aa7; /* violet */
+  --series-4: #4f8a3d; /* green  - growth potential */
+  --series-5: #4a3aa7; /* violet - dollar spot risk */
+  --series-6: #c0463a; /* rust   - microdochium risk */
 
   --seq-100: #cde2fb; --seq-450: #2a78d6; --seq-700: #0d366b;
 
@@ -44,7 +46,9 @@
     --series-1: #3987e5;
     --series-2: #199e70;
     --series-3: #c98500;
+    --series-4: #6bb04f;
     --series-5: #9085e9;
+    --series-6: #de6b5e;
 
     --div-pos: #3987e5;
     --div-neg: #e66767;

@@ -36,6 +36,8 @@ def make_forecast_fixture():
         "precipitation_sum": [0.0 if i % 4 else 3.2 for i in range(n)],
         "et0_fao_evapotranspiration": [2.1 + 0.1 * (i % 4) for i in range(n)],
         "leaf_wetness_probability_mean": [40 + (i % 30) for i in range(n)],
+        "wind_speed_10m_max": [8.0 + (i % 12) for i in range(n)],
+        "uv_index_max": [1.0 + (i % 7) for i in range(n)],
     }
     hourly_times = []
     rh, sm, st_, temp = [], [], [], []
@@ -166,6 +168,24 @@ def main():
 
     assert data["current"]["leaf_wetness_pct"] is not None
 
+    # ---- new batch-A figures ----
+    gp = data["current"]["growth_potential_pct"]
+    assert gp is not None and 0 <= gp <= 100, f"growth potential out of range: {gp}"
+    assert data["current"]["growth_potential_band"] in ("dormant", "slow", "moderate", "active")
+
+    md_score = data["current"]["microdochium_risk_score"]
+    assert md_score is not None and 0 <= md_score <= 4, f"microdochium risk out of range: {md_score}"
+    assert data["current"]["microdochium_risk_band"] in ("low", "moderate", "high", "very high")
+
+    assert data["current"]["wind_speed_max_kmh"] is not None
+    assert data["current"]["uv_index_max"] is not None
+    sw = data["current"]["spray_window"]
+    assert sw is not None and sw["status"] in ("good", "too_still", "too_windy")
+
+    gp_values = [d["growth_potential_pct"] for d in data["daily_history"] if d.get("growth_potential_pct") is not None]
+    assert len(gp_values) > 0, "growth potential should be computed for at least some daily_history rows"
+    assert all(0 <= v <= 100 for v in gp_values)
+
     # ---- advisor recommendations ----
     assert "recommendations" in data and len(data["recommendations"]) >= 1, \
         "build_recommendations should always return at least one item"
@@ -205,12 +225,31 @@ def test_build_recommendations_direct():
         "dollar_spot_risk_pct": 30, "dollar_spot_threshold_pct": 20,
         "water_balance_7d": {"net_mm": -30}, "soil_moisture_0_1cm": 0.05,
         "leaf_wetness_pct": 70, "temp_min_c": 1.0, "temp_max_c": 29.0,
+        "growth_potential_pct": 85, "growth_potential_band": "active",
+        "microdochium_risk_score": 4,
+        "wind_speed_max_kmh": 30, "spray_window": {"status": "too_windy", "rain_caveat": False},
+        "uv_index_max": 8,
+        "soil_temperature_0cm_c": 12.0,  # in germination range, but soil_moisture above (0.05) is dry
     }
     recs = fw.build_recommendations(current, {"rainfall_last_24h_mm": 20}, daily_history)
     ids = {r["id"] for r in recs}
     assert "dollar_spot" in ids and "water_deficit" in ids and "soil_dry" in ids
     assert "frost" in ids and "heat" in ids and "heavy_rain" in ids and "growth_fast" in ids
+    assert "microdochium" in ids and "growth_potential" in ids and "spray_window" in ids
+    assert "uv_staff" in ids and "seeding_window" in ids
+    # tmin=1.0 is above the hard-frost cutoff (<=0), so this should be the "watch" tier, not "serious"
+    frost_rec = next(r for r in recs if r["id"] == "frost")
+    assert frost_rec["severity"] == "warning" and "Frost risk" in frost_rec["title"]
+    seeding_rec = next(r for r in recs if r["id"] == "seeding_window")
+    assert seeding_rec["severity"] == "warning", "soil is dry, so seeding_window should warn, not say 'good'"
     assert fw.top_severity_of(recs) == "serious"
+
+    # Hard frost (below freezing) -> "serious", not just "warning"
+    hard_frost = dict(current)
+    hard_frost["temp_min_c"] = -1.5
+    recs_hf = fw.build_recommendations(hard_frost, {"rainfall_last_24h_mm": 20}, daily_history)
+    frost_rec_hf = next(r for r in recs_hf if r["id"] == "frost")
+    assert frost_rec_hf["severity"] == "serious" and "Hard frost" in frost_rec_hf["title"]
 
     # Calm conditions -> falls through to the all-clear fallback
     calm = {
@@ -221,6 +260,42 @@ def test_build_recommendations_direct():
     recs2 = fw.build_recommendations(calm, None, [{"gdd_day": 5.0}] * 7)
     assert fw.top_severity_of(recs2) == "good"
     assert all(r["severity"] == "good" for r in recs2)
+
+    # Waterlogging closure risk (heavy rain + saturated soil) + early wilt warning
+    # (heat streak + mild not-yet-flagged deficit) -- a distinct scenario since
+    # "saturated" and "dry" soil can't both be true in one set of figures.
+    wet_current = {
+        "dollar_spot_risk_pct": 5, "dollar_spot_threshold_pct": 20,
+        "water_balance_7d": {"net_mm": -5}, "soil_moisture_0_1cm": 0.45,
+        "leaf_wetness_pct": 20, "temp_min_c": 12.0, "temp_max_c": 20.0,
+    }
+    heat_streak_history = [{"gdd_day": 8.0}] * 4 + [
+        {"gdd_day": 8.0, "temp_max_c": 25.0, "is_forecast": False}] * 3
+    recs3 = fw.build_recommendations(wet_current, {"rainfall_last_24h_mm": 18}, heat_streak_history)
+    ids3 = {r["id"] for r in recs3}
+    assert "closure_risk" in ids3, "heavy rain + saturated soil should flag a closure risk"
+    assert "wilt_early_warning" in ids3, "3-day heat streak + mild deficit should flag an early warning"
+    assert "soil_wet" in ids3
+
+    # Edge tiers: dormant growth potential, near-still spray wind, low microdochium risk
+    edge_current = {
+        "dollar_spot_risk_pct": None, "dollar_spot_threshold_pct": 20,
+        "water_balance_7d": {"net_mm": 0}, "soil_moisture_0_1cm": 0.20,
+        "leaf_wetness_pct": 5, "temp_min_c": 8.0, "temp_max_c": 15.0,
+        "growth_potential_pct": 5, "growth_potential_band": "dormant",
+        "microdochium_risk_score": 1,
+        "wind_speed_max_kmh": 1.5, "spray_window": {"status": "too_still", "rain_caveat": False},
+    }
+    recs4 = fw.build_recommendations(edge_current, None, [{"gdd_day": 6.0}] * 7)
+    ids4 = {r["id"] for r in recs4}
+    assert "growth_potential" in ids4
+    gp_rec4 = next(r for r in recs4 if r["id"] == "growth_potential")
+    assert "very low" in gp_rec4["title"].lower()
+    assert "spray_window" in ids4
+    spray_rec4 = next(r for r in recs4 if r["id"] == "spray_window")
+    assert "still" in spray_rec4["title"].lower()
+    md_rec4 = next(r for r in recs4 if r["id"] == "microdochium")
+    assert md_rec4["severity"] == "good"
 
     print("test_build_recommendations_direct PASSED")
 

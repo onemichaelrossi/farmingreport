@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 scripts/fetch.log
+scripts/_test_output_sample.json
 .venv/

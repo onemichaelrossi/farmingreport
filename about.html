@@ -42,16 +42,22 @@
       <thead><tr><th>Check</th><th>Watch</th><th>Action</th></tr></thead>
       <tbody>
         <tr><td>Dollar spot risk</td><td>&ge; 60% of the site's threshold (default 20%)</td><td>&ge; the site's threshold</td></tr>
+        <tr><td>Microdochium patch risk</td><td>&ge; 2 out of 4</td><td>&ge; 3 out of 4</td></tr>
         <tr><td>7-day water balance</td><td>&le; &minus;10mm</td><td>&le; &minus;25mm</td></tr>
         <tr><td>Water surplus (soft ground)</td><td>&ge; +20mm over 7 days</td><td>&mdash;</td></tr>
+        <tr><td>Early drought-stress warning</td><td>3 days &ge; 24&deg;C max, with a mild (&minus;10 to 0mm) water deficit</td><td>&mdash;</td></tr>
         <tr><td>Topsoil moisture (0&ndash;1cm)</td><td>&lt; 12% (dry) or &gt; 40% (saturated)</td><td>&mdash;</td></tr>
+        <tr><td>Waterlogging closure risk</td><td>&mdash;</td><td>&ge; 15mm rain in 24h <em>and</em> topsoil &gt; 40%</td></tr>
         <tr><td>Leaf wetness probability</td><td>&ge; 60%</td><td>&mdash;</td></tr>
-        <tr><td>Overnight minimum temperature</td><td>&le; 2&deg;C (frost risk)</td><td>&mdash;</td></tr>
+        <tr><td>Overnight minimum temperature</td><td>&le; 2&deg;C (frost risk)</td><td>&le; 0&deg;C (hard frost, likely delayed start)</td></tr>
         <tr><td>Daytime maximum temperature</td><td>&ge; 28&deg;C (heat stress)</td><td>&mdash;</td></tr>
+        <tr><td>UV index</td><td>&ge; 6 (protect outdoor staff)</td><td>&mdash;</td></tr>
+        <tr><td>Spray window (max wind speed)</td><td>&lt; 3 km/h (still air/inversion risk) or &gt; 19 km/h (drift risk)</td><td>&mdash;</td></tr>
+        <tr><td>Soil temperature (overseeding)</td><td>6&ndash;8&deg;C (approaching window)</td><td>8&ndash;18&deg;C is the germination window itself</td></tr>
         <tr><td>Rainfall in the last 24 hours</td><td>&ge; 15mm</td><td>&mdash;</td></tr>
       </tbody>
     </table>
-    <p>Growth-rate guidance (mowing frequency, whether to hold off feeding) comes from the trailing 7-day average Growing Degree Days per day: &ge; 10/day is treated as active growth, &le; 4/day as slow growth. If nothing else is flagged, the advisor shows an "all clear" note rather than an empty panel.</p>
+    <p>Growth-rate guidance (mowing frequency, whether to hold off feeding) comes from two complementary signals: the trailing 7-day average Growing Degree Days per day (&ge; 10/day is treated as active growth, &le; 4/day as slow growth &mdash; a "how has the last week actually gone" view), and today's Growth Potential percentage (a forward-looking, temperature-only signal &mdash; see below). If nothing else is flagged, the advisor shows an "all clear" note rather than an empty panel.</p>
   </div>
 
   <div class="card about-prose">
@@ -65,6 +71,15 @@
 
       <dt>Smith-Kerns model</dt>
       <dd>A published logistic regression model that estimates the daily probability of dollar spot outbreak from the 5-day trailing average relative humidity and air temperature. Widely used in turf management as a spray-timing decision aid.</dd>
+
+      <dt>Growth Potential (GP)</dt>
+      <dd>A published turf-industry formula (PACE Turf / Asian Turfgrass Center) estimating, on a 0&ndash;100% scale, what fraction of a cool-season grass species' maximum growth rate today's mean air temperature allows. 100% is optimal (20&deg;C); it falls off in both directions. Used here as a same-day signal for mowing and nitrogen-dosing decisions, alongside the trailing GDD-based growth guidance above.</dd>
+
+      <dt>Microdochium (fusarium) patch</dt>
+      <dd>The UK's most common cool-weather turf disease (<em>Microdochium nivale</em>), producing small orange-brown patches, typically active autumn through spring. Peaks around 6&ndash;8&deg;C with sustained moisture. The dashboard's risk score is a simplified, transparent, rules-based indicator built the same way as the rest of this page's thresholds &mdash; it is <strong>not</strong> the proprietary GreenCast or BlightSpy-style commercial model, just a same-spirit approximation from temperature and rainfall/leaf wetness.</dd>
+
+      <dt>Spray window</dt>
+      <dd>An advisory (not a legal ruling) on whether today's forecast wind speed and rainfall suit a pesticide/fungicide application, based on general drift-management convention: enough air movement to avoid a still-air temperature inversion, but not so much that spray drifts off target. Always confirm against the specific product's label and the Code of Practice for Using Plant Protection Products / LERAP buffer-zone requirements before spraying.</dd>
 
       <dt>ET&#8320; (reference evapotranspiration)</dt>
       <dd>The modelled amount of water (in mm) that a well-watered reference surface would lose to evaporation and plant transpiration in a day. Used alongside rainfall to estimate whether a site is running a moisture deficit or surplus.</dd>
@@ -102,7 +117,13 @@
 
     <p><strong>Water balance</strong> is simply <code>&Sigma; precipitation &minus; &Sigma; ET&#8320;</code> over the trailing 7 days.</p>
 
-    <p>All weather, soil-moisture, soil-temperature and leaf-wetness figures are Open-Meteo model outputs for the site's geocoded coordinates, not physical sensor readings at the site itself.</p>
+    <p><strong>Growth Potential</strong> is calculated per day from mean air temperature (the hourly mean where available, otherwise <code>(T_max + T_min) / 2</code>):</p>
+    <p><code>GP = e<sup>&minus;0.5 &times; ((T &minus; 20) / 5.5)&sup2;</sup> &times; 100%</code></p>
+    <p>using the published constants for cool-season (C3) turf &mdash; 20&deg;C optimum, 5.5 variance. Warm-season (C4) turf uses different published constants and isn't modelled here.</p>
+
+    <p><strong>Microdochium patch risk</strong> is a simplified 0&ndash;4 score: a temperature factor (0&ndash;2, peaking in a 4&ndash;12&deg;C trailing 5-day mean, tapering to zero below 2&deg;C or above 16&deg;C) plus a moisture factor (0&ndash;2, from trailing 5-day total rainfall and/or mean leaf wetness probability, whichever is available). It is deliberately simple and documented in full above/below rather than being a validated commercial model &mdash; treat it as a same-spirit approximation, not a replacement for a proper disease-forecasting subscription.</p>
+
+    <p>All weather, soil-moisture, soil-temperature, wind, UV and leaf-wetness figures are Open-Meteo model outputs for the site's geocoded coordinates, not physical sensor readings at the site itself.</p>
   </div>
 
   <div class="card about-prose">

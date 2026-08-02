@@ -127,6 +127,12 @@ def mean_or_none(values):
     return statistics.fmean(vals) if vals else None
 
 
+def safe_idx(lst, i):
+    """lst[i] if it exists, else None -- for daily-array fields that may be
+    absent entirely (e.g. a fallback API request that dropped them)."""
+    return lst[i] if lst and i < len(lst) else None
+
+
 # ---------------------------------------------------------------------------
 # Data sources
 # ---------------------------------------------------------------------------
@@ -149,15 +155,22 @@ def geocode_postcode(postcode: str) -> dict:
 
 
 DAILY_PARAMS_CORE = "temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration"
-DAILY_PARAMS_WITH_LEAF = DAILY_PARAMS_CORE + ",leaf_wetness_probability_mean"
+# Wind (spray-window advisory) and UV (staff heat/sun-safety advisory) -- forecast-window only,
+# not requested from the archive API since those two advisories only ever look at today/near-term.
+DAILY_PARAMS_EXTRA = "wind_speed_10m_max,uv_index_max"
+DAILY_PARAMS_FULL = DAILY_PARAMS_CORE + ",leaf_wetness_probability_mean," + DAILY_PARAMS_EXTRA
+DAILY_PARAMS_NO_EXTRA = DAILY_PARAMS_CORE + ",leaf_wetness_probability_mean"
 HOURLY_PARAMS = "relative_humidity_2m,soil_moisture_0_to_1cm,soil_temperature_0cm,temperature_2m"
 
 
 def fetch_forecast(lat: float, lon: float) -> dict:
-    """Recent (past_days) + upcoming (forecast_days) daily and hourly data."""
+    """Recent (past_days) + upcoming (forecast_days) daily and hourly data.
+    Tries the full daily parameter set first, then progressively smaller
+    ones if Open-Meteo rejects a field -- keeps the dashboard running (minus
+    that one figure) rather than failing outright if a parameter is ever
+    renamed/retired upstream."""
     base = "https://api.open-meteo.com/v1/forecast"
-    params_daily = DAILY_PARAMS_WITH_LEAF
-    for attempt_params in (params_daily, DAILY_PARAMS_CORE):
+    for attempt_params in (DAILY_PARAMS_FULL, DAILY_PARAMS_NO_EXTRA, DAILY_PARAMS_CORE):
         q = {
             "latitude": lat,
             "longitude": lon,
@@ -171,8 +184,8 @@ def fetch_forecast(lat: float, lon: float) -> dict:
         try:
             return http_get_json(url)
         except RuntimeError as e:
-            if attempt_params is params_daily:
-                log(f"  forecast: leaf_wetness_probability_mean rejected, retrying without it ({e})")
+            if attempt_params is not DAILY_PARAMS_CORE:
+                log(f"  forecast: params rejected ({attempt_params}), retrying with a smaller set ({e})")
                 continue
             raise
     raise RuntimeError("unreachable")
@@ -282,6 +295,116 @@ def dollar_spot_risk(mean_rh_5d: float | None, mean_temp_5d: float | None):
     return round(prob, 1), "ok"
 
 
+# Growth Potential (GP): a published turf-industry formula (PACE Turf / Asian
+# Turfgrass Center) estimating what fraction of a grass species' maximum
+# growth rate today's mean temperature allows, on a 0-100% scale. 20C/5.5 are
+# the standard published constants for cool-season (C3) turf, the relevant
+# type for UK conditions -- warm-season (C4) turf uses different constants
+# and isn't modelled here.
+GP_OPTIMUM_TEMP_C = 20.0
+GP_VARIANCE_C3 = 5.5
+
+GP_ACTIVE_PCT = 75.0
+GP_MODERATE_PCT = 40.0
+GP_DORMANT_PCT = 10.0
+
+
+def growth_potential_pct(mean_temp_c: float | None) -> float | None:
+    if mean_temp_c is None:
+        return None
+    gp = math.exp(-0.5 * ((mean_temp_c - GP_OPTIMUM_TEMP_C) / GP_VARIANCE_C3) ** 2)
+    return round(gp * 100, 1)
+
+
+def growth_potential_band(pct: float | None) -> str | None:
+    if pct is None:
+        return None
+    if pct >= GP_ACTIVE_PCT:
+        return "active"
+    if pct >= GP_MODERATE_PCT:
+        return "moderate"
+    if pct >= GP_DORMANT_PCT:
+        return "slow"
+    return "dormant"
+
+
+# Microdochium (fusarium) patch: the UK's most common cool-weather turf
+# disease. This is a simplified, transparent, rules-based indicator inspired
+# by published risk factors -- NOT the proprietary GreenCast/BlightSpy-style
+# model -- built the same way as the rest of this file's thresholds so it
+# stays explainable. Outbreaks peak around 6-8C with sustained moisture
+# (rain or leaf wetness); growth (and therefore disease pressure) falls away
+# below ~2C. Score is 0-4 (temperature factor 0-2 + moisture factor 0-2).
+MICRODOCHIUM_TEMP_LOW_C = 2.0
+MICRODOCHIUM_TEMP_PEAK_LOW_C = 4.0
+MICRODOCHIUM_TEMP_PEAK_HIGH_C = 12.0
+MICRODOCHIUM_TEMP_HIGH_C = 16.0
+MICRODOCHIUM_RAIN_5D_HIGH_MM = 15.0
+MICRODOCHIUM_RAIN_5D_WATCH_MM = 5.0
+MICRODOCHIUM_LEAFWET_HIGH_PCT = 60.0
+MICRODOCHIUM_LEAFWET_WATCH_PCT = 30.0
+MICRODOCHIUM_WATCH_SCORE = 2
+MICRODOCHIUM_ACTION_SCORE = 3
+
+
+def microdochium_risk(mean_temp_5d: float | None, rain_total_5d: float | None, leaf_wetness_mean_5d: float | None):
+    if mean_temp_5d is None:
+        return None, "insufficient data"
+    if MICRODOCHIUM_TEMP_PEAK_LOW_C <= mean_temp_5d <= MICRODOCHIUM_TEMP_PEAK_HIGH_C:
+        temp_factor = 2
+    elif MICRODOCHIUM_TEMP_LOW_C <= mean_temp_5d < MICRODOCHIUM_TEMP_PEAK_LOW_C or \
+            MICRODOCHIUM_TEMP_PEAK_HIGH_C < mean_temp_5d <= MICRODOCHIUM_TEMP_HIGH_C:
+        temp_factor = 1
+    else:
+        temp_factor = 0
+
+    moisture_factor = 0
+    if (leaf_wetness_mean_5d is not None and leaf_wetness_mean_5d >= MICRODOCHIUM_LEAFWET_HIGH_PCT) or \
+            (rain_total_5d is not None and rain_total_5d >= MICRODOCHIUM_RAIN_5D_HIGH_MM):
+        moisture_factor = 2
+    elif (leaf_wetness_mean_5d is not None and leaf_wetness_mean_5d >= MICRODOCHIUM_LEAFWET_WATCH_PCT) or \
+            (rain_total_5d is not None and rain_total_5d >= MICRODOCHIUM_RAIN_5D_WATCH_MM):
+        moisture_factor = 1
+
+    return temp_factor + moisture_factor, "ok"
+
+
+def microdochium_band(score: int | None) -> str | None:
+    if score is None:
+        return None
+    if score >= 4:
+        return "very high"
+    if score >= MICRODOCHIUM_ACTION_SCORE:
+        return "high"
+    if score >= MICRODOCHIUM_WATCH_SCORE:
+        return "moderate"
+    return "low"
+
+
+# Spray application window: general drift-management convention is a
+# moderate breeze (roughly Beaufort force 2) -- enough air movement to avoid
+# a still-air temperature inversion trapping the spray, but not so much that
+# drift risk rises. Always confirm against the specific product's label and
+# the Code of Practice for Using Plant Protection Products / LERAP
+# requirements -- these are general figures, not a product-specific ruling.
+SPRAY_WIND_MIN_KMH = 3.0
+SPRAY_WIND_MAX_KMH = 19.0
+SPRAY_RAIN_CAVEAT_MM = 1.0
+
+
+def spray_window_status(wind_max_kmh: float | None, precip_today_mm: float | None):
+    if wind_max_kmh is None:
+        return None
+    if wind_max_kmh < SPRAY_WIND_MIN_KMH:
+        status = "too_still"
+    elif wind_max_kmh > SPRAY_WIND_MAX_KMH:
+        status = "too_windy"
+    else:
+        status = "good"
+    rain_caveat = precip_today_mm is not None and precip_today_mm >= SPRAY_RAIN_CAVEAT_MM
+    return {"status": status, "rain_caveat": rain_caveat}
+
+
 # ---------------------------------------------------------------------------
 # Turf advisor recommendations
 # ---------------------------------------------------------------------------
@@ -292,6 +415,7 @@ def dollar_spot_risk(mean_rh_5d: float | None, mean_temp_5d: float | None):
 SEVERITY_RANK = {"good": 0, "warning": 1, "serious": 2}
 
 FROST_RISK_TEMP_C = 2.0
+FROST_RISK_HARD_C = 0.0
 HEAT_STRESS_TEMP_C = 28.0
 LEAF_WETNESS_WATCH_PCT = 60.0
 SOIL_MOISTURE_DRY = 0.12
@@ -302,6 +426,11 @@ WATER_SURPLUS_WATCH_MM = 20.0
 HEAVY_RAIN_24H_MM = 15.0
 GDD_FAST_GROWTH_PER_DAY = 10.0
 GDD_SLOW_GROWTH_PER_DAY = 4.0
+HEAT_STREAK_TEMP_C = 24.0
+HEAT_STREAK_DAYS = 3
+SEED_GERMINATION_MIN_C = 8.0
+SEED_GERMINATION_MAX_C = 18.0
+UV_HIGH = 6.0
 
 
 def _reco(id_: str, severity: str, title: str, message: str) -> dict:
@@ -332,6 +461,26 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
                 "dollar_spot", "good", "Dollar spot risk is low",
                 f"Modelled risk is {risk:.0f}%, well under the {threshold:.0f}% threshold. Routine monitoring is enough."))
 
+    # --- Microdochium (fusarium) patch risk ---
+    md_score = current.get("microdochium_risk_score")
+    if md_score is not None:
+        if md_score >= MICRODOCHIUM_ACTION_SCORE:
+            recs.append(_reco(
+                "microdochium", "serious", "Microdochium patch risk is high",
+                f"Modelled risk is {md_score}/4 — temperature and recent rainfall/leaf wetness both favour the "
+                f"UK's most common turf disease. Check closely for small, orange-brown patches, especially in "
+                f"shaded or slow-draining areas, and consider a preventative fungicide or cultural intervention "
+                f"(brushing off dew, improving airflow)."))
+        elif md_score >= MICRODOCHIUM_WATCH_SCORE:
+            recs.append(_reco(
+                "microdochium", "warning", "Microdochium patch risk is building",
+                f"Modelled risk is {md_score}/4. Conditions are turning favourable for the disease — increase "
+                f"monitoring frequency, especially after the next rain."))
+        else:
+            recs.append(_reco(
+                "microdochium", "good", "Microdochium patch risk is low",
+                f"Modelled risk is {md_score}/4. Routine monitoring is enough for now."))
+
     # --- 7-day water balance ---
     wb = current.get("water_balance_7d") or {}
     net = wb.get("net_mm")
@@ -355,6 +504,20 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
                 "water_balance", "good", "Water balance is in a healthy range",
                 f"7-day net balance is {net:+0.0f}mm — no irrigation action needed today."))
 
+    # --- Early drought-stress warning: a building heat streak plus a mild
+    # (not-yet-flagged) deficit, ahead of the 7-day balance itself crossing
+    # the watch threshold above. ---
+    recent_actual = [r for r in daily_history if not r.get("is_forecast")][-HEAT_STREAK_DAYS:]
+    if len(recent_actual) == HEAT_STREAK_DAYS and \
+            all((r.get("temp_max_c") or 0) >= HEAT_STREAK_TEMP_C for r in recent_actual):
+        if net is not None and WATER_DEFICIT_WATCH_MM < net < 0:
+            recs.append(_reco(
+                "wilt_early_warning", "warning", "Early drought-stress warning",
+                f"Daytime highs have reached {HEAT_STREAK_TEMP_C:.0f}°C+ for {HEAT_STREAK_DAYS} days running "
+                f"while the water balance is already slightly negative ({net:+.0f}mm). Watch for early wilt "
+                f"signs (dulling colour, footprinting that doesn't spring back) before the 7-day balance itself "
+                f"crosses the irrigation threshold."))
+
     # --- Soil moisture ---
     sm = current.get("soil_moisture_0_1cm")
     if sm is not None:
@@ -369,6 +532,37 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
                 f"Modelled topsoil moisture is {sm * 100:.0f}%. Avoid mowing, rolling or heavy foot traffic "
                 f"until it drains, to prevent compaction and surface damage."))
 
+    # --- Combined waterlogging closure risk (heavy rain + already-saturated topsoil) ---
+    flood_24h = flood.get("rainfall_last_24h_mm") if flood else None
+    if flood_24h is not None and flood_24h >= HEAVY_RAIN_24H_MM and sm is not None and sm > SOIL_MOISTURE_SATURATED:
+        recs.append(_reco(
+            "closure_risk", "serious", "Consider closing for traffic",
+            f"{flood_24h:.0f}mm of rain in the last 24 hours combined with saturated topsoil ({sm * 100:.0f}%) "
+            f"means the surface is at high risk of damage from foot or vehicle traffic. Consider restricting "
+            f"access until it drains."))
+
+    # --- Overseeding / seeding window (soil temperature germination band) ---
+    soil_t = current.get("soil_temperature_0cm_c")
+    if soil_t is not None and (SEED_GERMINATION_MIN_C - 2) <= soil_t <= SEED_GERMINATION_MAX_C:
+        if soil_t >= SEED_GERMINATION_MIN_C:
+            if sm is not None and SOIL_MOISTURE_DRY <= sm <= SOIL_MOISTURE_SATURATED:
+                recs.append(_reco(
+                    "seeding_window", "good", "Good window for overseeding",
+                    f"Soil temperature is {soil_t:.1f}°C, within the germination range for most cool-season UK "
+                    f"turf species, and topsoil moisture looks workable. Favourable conditions if renovation is "
+                    f"on the plan."))
+            elif sm is not None:
+                recs.append(_reco(
+                    "seeding_window", "warning", "Soil temperature suits seeding, but moisture doesn't",
+                    f"Soil temperature is {soil_t:.1f}°C (good for germination) but topsoil moisture is "
+                    f"currently {'too dry' if sm < SOIL_MOISTURE_DRY else 'saturated'} — irrigate or let it "
+                    f"drain before seeding."))
+        else:
+            recs.append(_reco(
+                "seeding_window", "good", "Soil is warming towards a seeding window",
+                f"Soil temperature is {soil_t:.1f}°C, approaching the germination threshold "
+                f"({SEED_GERMINATION_MIN_C:.0f}°C) for most cool-season UK turf species."))
+
     # --- Leaf wetness ---
     lw = current.get("leaf_wetness_pct")
     if lw is not None and lw >= LEAF_WETNESS_WATCH_PCT:
@@ -379,7 +573,12 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
 
     # --- Frost / heat stress ---
     tmin, tmax = current.get("temp_min_c"), current.get("temp_max_c")
-    if tmin is not None and tmin <= FROST_RISK_TEMP_C:
+    if tmin is not None and tmin <= FROST_RISK_HARD_C:
+        recs.append(_reco(
+            "frost", "serious", "Hard frost — likely delayed start",
+            f"Overnight minimum is forecast/recorded at {tmin:.1f}°C, at or below freezing. Keep all traffic "
+            f"off the turf until it has fully thawed — plan for a delayed opening or start this morning."))
+    elif tmin is not None and tmin <= FROST_RISK_TEMP_C:
         recs.append(_reco(
             "frost", "warning", "Frost risk",
             f"Overnight minimum is forecast/recorded at {tmin:.1f}°C. Avoid mowing or heavy traffic on "
@@ -389,6 +588,56 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
             "heat", "warning", "Heat stress risk",
             f"Daytime maximum is forecast/recorded at {tmax:.1f}°C. Raise mowing height, irrigate early "
             f"morning rather than midday, and avoid mowing during peak heat."))
+
+    # --- UV index (outdoor staff welfare) ---
+    uv = current.get("uv_index_max")
+    if uv is not None and uv >= UV_HIGH:
+        recs.append(_reco(
+            "uv_staff", "warning", "High UV — protect outdoor staff",
+            f"UV index is forecast to reach {uv:.0f} today. Sun cream, hats and shade breaks are worth "
+            f"encouraging for anyone working outside for extended periods, particularly around midday."))
+
+    # --- Spray application window (wind + rain) ---
+    sw = current.get("spray_window")
+    wind_max = current.get("wind_speed_max_kmh")
+    if sw and sw.get("status") and wind_max is not None:
+        if sw["status"] == "too_windy":
+            recs.append(_reco(
+                "spray_window", "warning", "Too windy to spray today",
+                f"Wind is forecast up to {wind_max:.0f} km/h, above the typical safe spraying range — drift "
+                f"risk is elevated. Wait for calmer conditions."))
+        elif sw["status"] == "too_still":
+            recs.append(_reco(
+                "spray_window", "warning", "Very still air — inversion risk",
+                f"Wind is forecast at only {wind_max:.0f} km/h. Near-still conditions can trap spray in a "
+                f"temperature inversion rather than settling on target, particularly overnight and early "
+                f"morning. Confirm conditions before spraying."))
+        elif sw.get("rain_caveat"):
+            recs.append(_reco(
+                "spray_window", "warning", "Spray window is workable, but rain is forecast",
+                f"Wind is forecast at up to {wind_max:.0f} km/h, within the typical safe spraying range, but "
+                f"rain is also forecast today — check the product's rainfast interval before applying."))
+        else:
+            recs.append(_reco(
+                "spray_window", "good", "Conditions suit spraying today",
+                f"Wind is forecast at up to {wind_max:.0f} km/h, within the typical safe spraying range. "
+                f"Always confirm against the product label and LERAP/buffer-zone requirements."))
+
+    # --- Today's growth potential (temperature-only growth-rate signal) ---
+    gp = current.get("growth_potential_pct")
+    gp_band = current.get("growth_potential_band")
+    if gp is not None:
+        if gp_band == "dormant":
+            recs.append(_reco(
+                "growth_potential", "good", "Growth potential is very low today",
+                f"Today's growth potential is {gp:.0f}% of maximum (temperature-limited). Little top growth "
+                f"is expected — hold off on nitrogen and ease mowing right back."))
+        elif gp_band == "active":
+            recs.append(_reco(
+                "growth_potential", "good", "Growth potential is high today",
+                f"Today's growth potential is {gp:.0f}% of maximum. Temperature is close to optimal for "
+                f"growth — a good day for mowing, and nitrogen will be used efficiently if feeding is due."))
+        # "slow"/"moderate" bands are deliberately not flagged — unremarkable, mid-range conditions.
 
     # --- Growth rate / mowing guidance from trailing GDD accumulation ---
     recent = [r for r in daily_history if r.get("gdd_day") is not None][-7:]
@@ -495,6 +744,8 @@ def build_site_data(site_cfg: dict) -> dict:
                 daily.get("leaf_wetness_probability_mean", [None] * len(daily.get("time", [])))[i]
                 if "leaf_wetness_probability_mean" in daily else None
             ),
+            "wind_speed_max_kmh": safe_idx(daily.get("wind_speed_10m_max"), i),
+            "uv_index_max": safe_idx(daily.get("uv_index_max"), i),
             "is_forecast": is_future,
         }
 
@@ -513,6 +764,17 @@ def build_site_data(site_cfg: dict) -> dict:
             gdd_cumulative += gdd_day
         row["gdd_day"] = round(gdd_day, 2) if gdd_day is not None else None
         row["gdd_cumulative"] = round(gdd_cumulative, 1)
+
+        # Best-available daily mean temperature: prefer the hourly-derived mean
+        # (forecast window), fall back to (max+min)/2 for archive-only days --
+        # this lets Growth Potential and the microdochium model below run over
+        # the whole season, not just the hourly window dollar spot is limited to.
+        mean_temp_est = row.get("mean_temp_c")
+        if mean_temp_est is None and tmax is not None and tmin is not None:
+            mean_temp_est = (tmax + tmin) / 2.0
+        row["mean_temp_est_c"] = round(mean_temp_est, 2) if mean_temp_est is not None else None
+        row["growth_potential_pct"] = growth_potential_pct(row["mean_temp_est_c"])
+
         daily_history.append(row)
 
     # Dollar spot risk: needs a trailing 5-day window of mean_rh/mean_temp (only available
@@ -529,6 +791,24 @@ def build_site_data(site_cfg: dict) -> dict:
         combined[d]["dollar_spot_status"] = status
         combined[d]["dollar_spot_mean_rh_5d"] = round(rh5, 1) if rh5 is not None else None
         combined[d]["dollar_spot_mean_temp_5d_c"] = round(t5, 1) if t5 is not None else None
+
+    # Microdochium patch risk: needs a trailing 5-day window of mean temperature
+    # (via the archive-friendly mean_temp_est_c, so this runs over the whole
+    # season) and 5-day rainfall/leaf-wetness, unlike dollar spot above which is
+    # limited to the hourly-data window.
+    for idx, d in enumerate(ordered_dates):
+        if idx < 4:
+            continue
+        window = ordered_dates[idx - 4: idx + 1]
+        temp5 = mean_or_none([combined[w].get("mean_temp_est_c") for w in window])
+        rain_vals = [combined[w].get("precip_mm") for w in window if combined[w].get("precip_mm") is not None]
+        rain5 = round(sum(rain_vals), 1) if rain_vals else None
+        leafwet5 = mean_or_none([combined[w].get("leaf_wetness_pct") for w in window])
+        score, status = microdochium_risk(temp5, rain5, leafwet5)
+        combined[d]["microdochium_risk_score"] = score
+        combined[d]["microdochium_status"] = status
+        combined[d]["microdochium_mean_temp_5d_c"] = round(temp5, 1) if temp5 is not None else None
+        combined[d]["microdochium_rain_5d_mm"] = rain5
 
     # today's snapshot for the summary card
     today_iso = today.isoformat()
@@ -549,6 +829,14 @@ def build_site_data(site_cfg: dict) -> dict:
         "dollar_spot_risk_pct": today_row.get("dollar_spot_risk_pct"),
         "dollar_spot_status": today_row.get("dollar_spot_status"),
         "dollar_spot_threshold_pct": dollar_spot_threshold,
+        "growth_potential_pct": today_row.get("growth_potential_pct"),
+        "growth_potential_band": growth_potential_band(today_row.get("growth_potential_pct")),
+        "microdochium_risk_score": today_row.get("microdochium_risk_score"),
+        "microdochium_status": today_row.get("microdochium_status"),
+        "microdochium_risk_band": microdochium_band(today_row.get("microdochium_risk_score")),
+        "wind_speed_max_kmh": today_row.get("wind_speed_max_kmh"),
+        "uv_index_max": today_row.get("uv_index_max"),
+        "spray_window": spray_window_status(today_row.get("wind_speed_max_kmh"), today_row.get("precip_mm")),
     }
 
     # 7-day water balance (ET0 vs rainfall) ending today

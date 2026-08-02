@@ -13,7 +13,7 @@
   <header class="app-header">
     <div>
       <h1>Farming &amp; Turf Weather Dashboard</h1>
-      <p class="sub">Predictive weather, growing degree days, disease risk and irrigation guidance</p>
+      <p class="sub">Predictive weather, growth potential, disease risk, irrigation and spray-window guidance</p>
     </div>
     <div class="controls">
       <label for="site-select" style="font-size:13px;color:var(--text-secondary);">Site</label>
@@ -67,6 +67,22 @@
       <button class="table-toggle" data-target="temp-table">View as table</button>
       <div id="temp-table"></div>
     </div>
+
+    <div class="card">
+      <h2>Growth potential <span class="unit">(temperature-driven, % of maximum)</span></h2>
+      <div id="gp-chart"></div>
+      <button class="table-toggle" data-target="gp-table">View as table</button>
+      <div id="gp-table"></div>
+      <div class="card-foot">PACE Turf/Asian Turfgrass Center formula for cool-season turf. Drives mowing frequency and nitrogen-dose guidance.</div>
+    </div>
+
+    <div class="card">
+      <h2>Microdochium patch risk <span class="unit">(indicative, 0&ndash;4)</span></h2>
+      <div id="microdochium-chart"></div>
+      <button class="table-toggle" data-target="microdochium-table">View as table</button>
+      <div id="microdochium-table"></div>
+      <div class="card-foot">Dashed line marks the "high risk" threshold. A simplified rules-based indicator, not a validated proprietary model &mdash; see About &amp; glossary.</div>
+    </div>
   </div>
 
   <div class="card">
@@ -111,6 +127,17 @@
   function fmtDate(iso) {
     const d = new Date(iso + "T00:00:00");
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  }
+  function capitalize(s) {
+    if (!s) return "";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  function sprayWindowLabel(sw) {
+    if (!sw || !sw.status) return "";
+    const map = { good: "Spray window: good", too_windy: "Spray window: too windy", too_still: "Spray window: too still" };
+    let label = map[sw.status] || "";
+    if (sw.status === "good" && sw.rain_caveat) label += " (rain forecast)";
+    return label;
   }
 
   // ---------------------------------------------------------------------
@@ -397,6 +424,10 @@
     kpis.push(statTile("7-day water balance", `${c.water_balance_7d.net_mm >= 0 ? "+" : ""}${fmt(c.water_balance_7d.net_mm,1)}<span class="unit">mm</span>`, c.water_balance_7d.state === "deficit" ? "Deficit &mdash; consider irrigation" : "Surplus"));
     kpis.push(statTile("Soil moisture (0-1cm)", c.soil_moisture_0_1cm !== null ? `${fmt(c.soil_moisture_0_1cm * 100,1)}<span class="unit">%</span>` : "&ndash;", c.soil_temperature_0cm_c !== null ? `Soil temp: ${fmt(c.soil_temperature_0cm_c,1)}&deg;C` : ""));
     kpis.push(statTile("Leaf wetness", c.leaf_wetness_pct !== null ? `${fmt(c.leaf_wetness_pct,0)}<span class="unit">%</span>` : "&ndash;", "modelled daily mean probability"));
+    kpis.push(statTile("Growth potential", c.growth_potential_pct != null ? `${fmt(c.growth_potential_pct,0)}<span class="unit">%</span>` : "&ndash;", c.growth_potential_band ? capitalize(c.growth_potential_band) + " growth" : ""));
+    kpis.push(statTile("Microdochium risk", c.microdochium_risk_score != null ? `${fmt(c.microdochium_risk_score,0)}<span class="unit">/4</span>` : "&ndash;", c.microdochium_risk_band ? capitalize(c.microdochium_risk_band) : ""));
+    kpis.push(statTile("Wind (max today)", c.wind_speed_max_kmh != null ? `${fmt(c.wind_speed_max_kmh,0)}<span class="unit">km/h</span>` : "&ndash;", sprayWindowLabel(c.spray_window)));
+    kpis.push(statTile("UV index (max today)", c.uv_index_max != null ? `${fmt(c.uv_index_max,0)}` : "&ndash;", c.uv_index_max != null && c.uv_index_max >= 6 ? "High &mdash; protect outdoor staff" : "Low/moderate"));
     document.getElementById("kpi-grid").innerHTML = kpis.join("");
 
     // ---- Long-run trend base: prefer the accumulated history file over
@@ -442,10 +473,28 @@
     buildTable(document.getElementById("temp-table"), ["Date", "Max °C", "Min °C"],
       tRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.temp_max_c,1), fmt(r.temp_min_c,1)]));
 
+    // ---- Growth potential chart ----
+    const gpRows = trendSeries.filter(r => r.growth_potential_pct !== undefined);
+    lineChart(document.getElementById("gp-chart"), gpRows,
+      [{ get: r => r.growth_potential_pct, color: "var(--series-4)", label: "Growth potential" }],
+      { ariaLabel: "Growth potential, percentage of maximum", yDigits: 0, unit: "%", endLabel: true, area: true });
+    buildTable(document.getElementById("gp-table"), ["Date", "Growth potential %"],
+      gpRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), fmt(r.growth_potential_pct,0)]));
+
+    // ---- Microdochium patch risk chart ----
+    const MICRODOCHIUM_ACTION_SCORE = 3;
+    const mdRows = trendSeries.filter(r => r.microdochium_risk_score !== undefined);
+    lineChart(document.getElementById("microdochium-chart"), mdRows,
+      [{ get: r => r.microdochium_risk_score, color: "var(--series-6)", label: "Microdochium risk" }],
+      { ariaLabel: "Microdochium patch risk score, 0 to 4", yDigits: 0, unit: "/4", endLabel: true,
+        thresholdY: MICRODOCHIUM_ACTION_SCORE, thresholdLabel: `High risk ${MICRODOCHIUM_ACTION_SCORE}/4` });
+    buildTable(document.getElementById("microdochium-table"), ["Date", "Risk /4", "5d mean temp", "5d rain mm"],
+      mdRows.map(r => [fmtDate(r.date) + (r.is_forecast ? " (f/c)" : ""), r.microdochium_risk_score !== null ? fmt(r.microdochium_risk_score,0) : (r.microdochium_status || "–"), fmt(r.microdochium_mean_temp_5d_c,1), fmt(r.microdochium_rain_5d_mm,1)]));
+
     // ---- Forecast table ----
-    let fHtml = `<table class="forecast-table"><thead><tr><th>Date</th><th>Max &deg;C</th><th>Min &deg;C</th><th>Rain mm</th><th>ET&#8320; mm</th><th>Leaf wet %</th><th>Dollar spot</th></tr></thead><tbody>`;
+    let fHtml = `<table class="forecast-table"><thead><tr><th>Date</th><th>Max &deg;C</th><th>Min &deg;C</th><th>Rain mm</th><th>ET&#8320; mm</th><th>Wind km/h</th><th>Leaf wet %</th><th>Dollar spot</th><th>Microdochium</th></tr></thead><tbody>`;
     data.forecast.forEach(r => {
-      fHtml += `<tr><td>${fmtDate(r.date)}</td><td>${fmt(r.temp_max_c,1)}</td><td>${fmt(r.temp_min_c,1)}</td><td>${fmt(r.precip_mm,1)}</td><td>${fmt(r.et0_mm,1)}</td><td>${r.leaf_wetness_pct !== null ? fmt(r.leaf_wetness_pct,0) : "–"}</td><td>${riskBadge(r.dollar_spot_risk_pct, r.dollar_spot_status, c.dollar_spot_threshold_pct)}</td></tr>`;
+      fHtml += `<tr><td>${fmtDate(r.date)}</td><td>${fmt(r.temp_max_c,1)}</td><td>${fmt(r.temp_min_c,1)}</td><td>${fmt(r.precip_mm,1)}</td><td>${fmt(r.et0_mm,1)}</td><td>${r.wind_speed_max_kmh !== null && r.wind_speed_max_kmh !== undefined ? fmt(r.wind_speed_max_kmh,0) : "–"}</td><td>${r.leaf_wetness_pct !== null ? fmt(r.leaf_wetness_pct,0) : "–"}</td><td>${riskBadge(r.dollar_spot_risk_pct, r.dollar_spot_status, c.dollar_spot_threshold_pct)}</td><td>${r.microdochium_risk_score !== null && r.microdochium_risk_score !== undefined ? fmt(r.microdochium_risk_score,0) + "/4" : "–"}</td></tr>`;
     });
     fHtml += "</tbody></table>";
     document.getElementById("forecast-table-wrap").innerHTML = fHtml;
