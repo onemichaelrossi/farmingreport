@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-09-05T05:01:29+00:00",
+  "generated_at": "2026-09-06T05:01:38+00:00",
   "sites": [
     {
       "name": "Wilberfoss",
       "slug": "wilberfoss",
       "postcode": "YO41 5YZ",
       "admin_district": "East Riding of Yorkshire",
-      "last_updated": "2026-09-05T05:00:24+00:00",
+      "last_updated": "2026-09-06T05:00:30+00:00",
       "status": "partial",
       "errors": [
         "no Environment Agency rainfall station within 15.0km (EA covers England & Wales only)"
       ],
-      "gdd_season_total": 1474.2,
-      "dollar_spot_risk_pct": 19.4,
+      "gdd_season_total": 1484.3,
+      "dollar_spot_risk_pct": 19.8,
       "top_severity": "warning"
     },
     {
@@ -20,11 +20,11 @@
       "slug": "hougham",
       "postcode": "NG32 2JD",
       "admin_district": "South Kesteven",
-      "last_updated": "2026-09-05T05:01:29+00:00",
+      "last_updated": "2026-09-06T05:01:38+00:00",
       "status": "ok",
       "errors": [],
-      "gdd_season_total": 1698.1,
-      "dollar_spot_risk_pct": 19.1,
+      "gdd_season_total": 1711.5,
+      "dollar_spot_risk_pct": 18.3,
       "top_severity": "warning"
     }
   ]
