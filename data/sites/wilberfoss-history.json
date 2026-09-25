@@ -4565,5 +4565,32 @@
     "microdochium_rain_5d_mm": 0.1,
     "soil_moisture_0_1cm": 0.205,
     "top_severity": "warning"
+  },
+  {
+    "date": "2026-09-25",
+    "temp_max_c": 17.1,
+    "temp_min_c": 9.8,
+    "precip_mm": 0.7,
+    "et0_mm": 1.0,
+    "mean_rh_pct": 83.5,
+    "mean_temp_c": 13.53,
+    "leaf_wetness_pct": 60,
+    "wind_speed_max_kmh": 17.6,
+    "uv_index_max": 1.15,
+    "is_forecast": false,
+    "gdd_day": 7.45,
+    "gdd_cumulative": 1653.7,
+    "mean_temp_est_c": 13.53,
+    "growth_potential_pct": 50.1,
+    "dollar_spot_risk_pct": 17.9,
+    "dollar_spot_status": "ok",
+    "dollar_spot_mean_rh_5d": 78.2,
+    "dollar_spot_mean_temp_5d_c": 14.9,
+    "microdochium_risk_score": 2,
+    "microdochium_status": "ok",
+    "microdochium_mean_temp_5d_c": 14.9,
+    "microdochium_rain_5d_mm": 0.8,
+    "soil_moisture_0_1cm": 0.208,
+    "top_severity": "warning"
   }
 ]
