@@ -95,6 +95,12 @@
     <div id="flood-panel"></div>
   </div>
 
+  <div class="card">
+    <h2>NVZ closed periods <span class="unit">(England &mdash; manufactured nitrogen fertiliser)</span></h2>
+    <div id="nvz-panel"></div>
+    <div class="card-foot">Statutory closed periods for spreading manufactured nitrogen fertiliser in designated Nitrate Vulnerable Zones in England: grassland 15 September &ndash; 15 January, arable/tillage 1 September &ndash; 15 January (crop-specific exceptions exist). Only applies if the site is inside a designated NVZ &mdash; check on Defra's MAGIC map. Organic manures have separate, different rules. Dates are fixed in regulation, not computed from weather.</div>
+  </div>
+
   <footer class="app-footer">
     <div id="sources-line">Data: Open-Meteo (weather, soil, ET&#8320;), Environment Agency Real-Time Flood-Monitoring API (rainfall, England &amp; Wales only), postcodes.io (geocoding).</div>
     <div>Dollar spot risk uses the published Smith-Kerns logistic regression model &mdash; a decision aid, not a guarantee. Turf advisor recommendations are rules-based from the same figures. Figures are modelled from weather data, not on-site sensors.</div>
@@ -428,6 +434,12 @@
     kpis.push(statTile("Microdochium risk", c.microdochium_risk_score != null ? `${fmt(c.microdochium_risk_score,0)}<span class="unit">/4</span>` : "&ndash;", c.microdochium_risk_band ? capitalize(c.microdochium_risk_band) : ""));
     kpis.push(statTile("Wind (max today)", c.wind_speed_max_kmh != null ? `${fmt(c.wind_speed_max_kmh,0)}<span class="unit">km/h</span>` : "&ndash;", sprayWindowLabel(c.spray_window)));
     kpis.push(statTile("UV index (max today)", c.uv_index_max != null ? `${fmt(c.uv_index_max,0)}` : "&ndash;", c.uv_index_max != null && c.uv_index_max >= 6 ? "High &mdash; protect outdoor staff" : "Low/moderate"));
+    const ng = c.nitrogen_guidance;
+    kpis.push(statTile("Suggested N this month", ng && ng.suggested_monthly_n_kg_ha != null ? `${fmt(ng.suggested_monthly_n_kg_ha,0)}<span class="unit">kg/ha</span>` : "&ndash;",
+      ng ? `${fmt(ng.mean_gp_30d_pct,0)}% GP (30d) &times; ${fmt(ng.max_monthly_n_kg_ha,0)} kg/ha ceiling` : ""));
+    const dew = c.morning_dew;
+    kpis.push(statTile("Dew tomorrow morning", dew ? (dew.dew_likely ? "Likely" : "Unlikely") : "&ndash;",
+      dew ? `temp&ndash;dew point spread ${fmt(dew.min_spread_c,1)}&deg;C (03:00&ndash;09:00)` : ""));
     document.getElementById("kpi-grid").innerHTML = kpis.join("");
 
     // ---- Long-run trend base: prefer the accumulated history file over
@@ -557,6 +569,42 @@
       document.getElementById("site-errors").style.display = "block";
       document.getElementById("site-errors").textContent = "Could not load the site list (data/index.json): " + err;
     });
+
+  // ---------------------------------------------------------------------
+  // NVZ closed-period panel (England, manufactured nitrogen). Static
+  // regulation dates, computed against today's date in the browser --
+  // no data pipeline involvement, so it is always current.
+  // ---------------------------------------------------------------------
+  (function renderNvz() {
+    const el = document.getElementById("nvz-panel");
+    if (!el) return;
+    const now = new Date();
+    const y = now.getFullYear();
+    const DAY = 86400000;
+
+    function periodStatus(label, startMonth, startDay) {
+      // Closed period runs (startDay startMonth) -> 15 January (next year).
+      let start = new Date(y, startMonth - 1, startDay);
+      let end = new Date(y + 1, 0, 15, 23, 59, 59);
+      if (now < start) {
+        // we may still be inside LAST year's period (1-15 January)
+        const prevEnd = new Date(y, 0, 15, 23, 59, 59);
+        if (now <= prevEnd) { start = new Date(y - 1, startMonth - 1, startDay); end = prevEnd; }
+      }
+      const inPeriod = now >= start && now <= end;
+      const days = Math.ceil(((inPeriod ? end : start) - now) / DAY);
+      return { label, inPeriod, days };
+    }
+
+    const rows = [periodStatus("Grassland", 9, 15), periodStatus("Arable / tillage", 9, 1)];
+    el.innerHTML = `<div class="flood-grid">` + rows.map(p => statTile(
+      p.label,
+      p.inPeriod ? `<span class="badge serious"><span class="dot"></span>Closed</span>`
+                 : `<span class="badge good"><span class="dot"></span>Open</span>`,
+      p.inPeriod ? `No manufactured N until 15 Jan &mdash; reopens in ${p.days} day${p.days === 1 ? "" : "s"}`
+                 : `Closed period starts in ${p.days} day${p.days === 1 ? "" : "s"}`
+    )).join("") + `</div>`;
+  })();
 
   // Best-effort: fill the footer repo link from the page's own location if served from GitHub Pages
   try {
