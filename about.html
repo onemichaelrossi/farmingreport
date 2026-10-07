@@ -54,6 +54,8 @@
         <tr><td>UV index</td><td>&ge; 6 (protect outdoor staff)</td><td>&mdash;</td></tr>
         <tr><td>Spray window (max wind speed)</td><td>&lt; 3 km/h (still air/inversion risk) or &gt; 19 km/h (drift risk)</td><td>&mdash;</td></tr>
         <tr><td>Soil temperature (overseeding)</td><td>6&ndash;8&deg;C (approaching window)</td><td>8&ndash;18&deg;C is the germination window itself</td></tr>
+        <tr><td>Morning dew outlook (tomorrow 03:00&ndash;09:00)</td><td>temp&ndash;dew point spread &le; 2&deg;C while above freezing <em>and</em> microdochium risk &ge; 2/4</td><td>&mdash;</td></tr>
+        <tr><td>Mowing/rolling (wet surface)</td><td>topsoil moisture &gt; 35% <em>or</em> &ge; 5mm rain today</td><td>&mdash;</td></tr>
         <tr><td>Rainfall in the last 24 hours</td><td>&ge; 15mm</td><td>&mdash;</td></tr>
       </tbody>
     </table>
@@ -101,6 +103,18 @@
 
       <dt>Flood/rainfall station</dt>
       <dd>The nearest Environment Agency real-time rainfall gauge to the site (England &amp; Wales only). Shown for situational awareness, not as a formal flood warning.</dd>
+
+      <dt>Morning dew outlook</dt>
+      <dd>Dew forms when air cools to its dew point. If tomorrow's early-morning forecast (03:00&ndash;09:00) shows temperature and dew point within 2&deg;C of each other while staying above freezing, the dashboard flags a likely dewy start. Physically removing dew early (switching, brushing, or an early mow) shortens leaf-wetness hours and is the single most effective cultural control against microdochium patch and dollar spot. Below freezing the same convergence means frost, which the frost advisory covers instead.</dd>
+
+      <dt>Mowing/rolling advisory</dt>
+      <dd>A keep-machinery-off flag when the surface is likely too wet to work: modelled topsoil moisture above 35%, or 5mm+ of rain today. Mowing or rolling wet turf risks rutting, scalping and compaction, and wet clippings spread fungal disease. Deliberately triggers slightly before the "saturated" soil threshold, because surface damage starts before full saturation.</dd>
+
+      <dt>Nitrogen guidance (growth-potential scaled)</dt>
+      <dd>A monthly nitrogen-rate suggestion using the PACE Turf approach: a peak-growth monthly ceiling (default 25 kg N/ha, configurable per site) scaled by the trailing 30-day average Growth Potential. The idea is to feed only what current temperatures let the grass actually use &mdash; so the suggestion rises through spring, peaks in the growing season and tapers towards winter dormancy of its own accord. A planning aid, not an agronomic prescription: adjust for species, rootzone and site history.</dd>
+
+      <dt>NVZ closed periods</dt>
+      <dd>In England, sites inside a designated Nitrate Vulnerable Zone must not spread manufactured nitrogen fertiliser during statutory closed periods: 15 September to 15 January on grassland, 1 September to 15 January on arable/tillage land (with some crop-specific exceptions). The dashboard panel shows whether each period is currently open or closed and the days until it changes. The dates are fixed in regulation &mdash; they are not computed from weather &mdash; and only apply if the site is actually inside a designated NVZ (check Defra's MAGIC map). Organic manures have separate rules not covered here.</dd>
     </dl>
   </div>
 
@@ -123,7 +137,11 @@
 
     <p><strong>Microdochium patch risk</strong> is a simplified 0&ndash;4 score: a temperature factor (0&ndash;2, peaking in a 4&ndash;12&deg;C trailing 5-day mean, tapering to zero below 2&deg;C or above 16&deg;C) plus a moisture factor (0&ndash;2, from trailing 5-day total rainfall and/or mean leaf wetness probability, whichever is available). It is deliberately simple and documented in full above/below rather than being a validated commercial model &mdash; treat it as a same-spirit approximation, not a replacement for a proper disease-forecasting subscription.</p>
 
-    <p>All weather, soil-moisture, soil-temperature, wind, UV and leaf-wetness figures are Open-Meteo model outputs for the site's geocoded coordinates, not physical sensor readings at the site itself.</p>
+    <p><strong>Morning dew outlook</strong> takes tomorrow's hourly forecast between 03:00 and 09:00 and finds the minimum spread <code>temperature &minus; dew point</code>. A spread &le; 2&deg;C with the temperature above 0&deg;C flags dew as likely.</p>
+
+    <p><strong>Nitrogen guidance</strong> is <code>suggested kg N/ha per month = monthly ceiling &times; (mean GP over last 30 days / 100)</code>, with a default ceiling of 25 kg N/ha for cool-season amenity turf (per-site configurable as <code>max_monthly_n_kg_ha</code> in <code>config/sites.json</code>).</p>
+
+    <p>All weather, soil-moisture, soil-temperature, dew-point, wind, UV and leaf-wetness figures are Open-Meteo model outputs for the site's geocoded coordinates, not physical sensor readings at the site itself.</p>
   </div>
 
   <div class="card about-prose">
