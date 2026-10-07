@@ -160,7 +160,7 @@ DAILY_PARAMS_CORE = "temperature_2m_max,temperature_2m_min,precipitation_sum,et0
 DAILY_PARAMS_EXTRA = "wind_speed_10m_max,uv_index_max"
 DAILY_PARAMS_FULL = DAILY_PARAMS_CORE + ",leaf_wetness_probability_mean," + DAILY_PARAMS_EXTRA
 DAILY_PARAMS_NO_EXTRA = DAILY_PARAMS_CORE + ",leaf_wetness_probability_mean"
-HOURLY_PARAMS = "relative_humidity_2m,soil_moisture_0_to_1cm,soil_temperature_0cm,temperature_2m"
+HOURLY_PARAMS = "relative_humidity_2m,soil_moisture_0_to_1cm,soil_temperature_0cm,temperature_2m,dew_point_2m"
 
 
 def fetch_forecast(lat: float, lon: float) -> dict:
@@ -405,6 +405,40 @@ def spray_window_status(wind_max_kmh: float | None, precip_today_mm: float | Non
     return {"status": status, "rain_caveat": rain_caveat}
 
 
+# Morning dew outlook: dew forms when the air temperature falls to (or near)
+# the dew point. If tomorrow's early-morning forecast shows the two within
+# DEW_SPREAD_C of each other, a wet start is likely — relevant because
+# physically removing dew early (switching/brushing) is the single most
+# effective cultural control against microdochium patch and dollar spot.
+# Below freezing the same closeness means frost, which the frost advisory
+# already covers, so dew_likely requires the temperature to stay above 0°C.
+DEW_SPREAD_C = 2.0
+DEW_WINDOW_START_H = 3   # 03:00 local
+DEW_WINDOW_END_H = 9     # 09:00 local
+
+
+def morning_dew_outlook(hourly_by_date: dict, date_iso: str) -> dict | None:
+    """Min (temp − dew point) spread over tomorrow's early-morning hours.
+    hourly_by_date lists are in hour order, so list index == hour of day."""
+    hb = hourly_by_date.get(date_iso) or {}
+    temps = hb.get("temperature_2m") or []
+    dews = hb.get("dew_point_2m") or []
+    pairs = [
+        (t, dp) for i, (t, dp) in enumerate(zip(temps, dews))
+        if DEW_WINDOW_START_H <= i <= DEW_WINDOW_END_H and t is not None and dp is not None
+    ]
+    if not pairs:
+        return None
+    min_spread = min(t - dp for t, dp in pairs)
+    min_temp = min(t for t, _ in pairs)
+    return {
+        "date": date_iso,
+        "min_spread_c": round(min_spread, 1),
+        "min_temp_c": round(min_temp, 1),
+        "dew_likely": min_spread <= DEW_SPREAD_C and min_temp > 0,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Turf advisor recommendations
 # ---------------------------------------------------------------------------
@@ -431,6 +465,16 @@ HEAT_STREAK_DAYS = 3
 SEED_GERMINATION_MIN_C = 8.0
 SEED_GERMINATION_MAX_C = 18.0
 UV_HIGH = 6.0
+# Mowing/rolling: keep machinery off when the surface is wet (rutting,
+# scalping, and disease spread via wet clippings). Deliberately a touch
+# below the saturated threshold — damage starts before full saturation.
+MOWING_SOIL_WET = 0.35
+MOWING_RAIN_TODAY_MM = 5.0
+# GP-scaled nitrogen guidance (PACE Turf approach): a peak-growth monthly
+# ceiling scaled by average Growth Potential. 25 kg N/ha/month is a sensible
+# cool-season amenity-turf ceiling; override per site in config
+# ("max_monthly_n_kg_ha") for fine turf (lower) or ryegrass pitches (higher).
+MAX_MONTHLY_N_KG_HA = 25.0
 
 
 def _reco(id_: str, severity: str, title: str, message: str) -> dict:
@@ -654,6 +698,51 @@ def build_recommendations(current: dict, flood: dict | None, daily_history: list
                 f"Growing degree days are accumulating slowly ({avg_gdd_day:.1f}/day over the last week). "
                 f"Reduce mowing frequency and hold off on fertiliser until growth picks up."))
 
+    # --- Morning dew outlook (cultural disease control) ---
+    dew = current.get("morning_dew")
+    if dew and dew.get("dew_likely"):
+        if md_score is not None and md_score >= MICRODOCHIUM_WATCH_SCORE:
+            recs.append(_reco(
+                "dew_morning", "warning", "Dew expected tomorrow morning — remove it early",
+                f"Forecast temperature and dew point are within {dew['min_spread_c']:.1f}°C of each other in the "
+                f"early hours, so a heavy dew is likely — and microdochium risk is already "
+                f"{md_score}/4. Switching, brushing or an early mow to knock dew off is the single most "
+                f"effective cultural control while disease pressure is elevated."))
+        else:
+            recs.append(_reco(
+                "dew_morning", "good", "Dew likely tomorrow morning",
+                f"Forecast temperature and dew point converge to within {dew['min_spread_c']:.1f}°C in the early "
+                f"hours. If you're mowing or spraying first thing, expect a wet surface; removing dew early "
+                f"shortens leaf-wetness hours and keeps disease pressure down."))
+
+    # --- Mowing / rolling advisory (wet-surface damage + clipping-borne disease) ---
+    precip_today = current.get("precip_today_mm")
+    hard_frost = tmin is not None and tmin <= FROST_RISK_HARD_C
+    surface_wet = ((sm is not None and sm > MOWING_SOIL_WET) or
+                   (precip_today is not None and precip_today >= MOWING_RAIN_TODAY_MM))
+    if surface_wet and not hard_frost:  # hard frost already carries its own keep-off advice
+        reasons = []
+        if sm is not None and sm > MOWING_SOIL_WET:
+            reasons.append(f"topsoil moisture is {sm * 100:.0f}%")
+        if precip_today is not None and precip_today >= MOWING_RAIN_TODAY_MM:
+            reasons.append(f"{precip_today:.0f}mm of rain is forecast/recorded today")
+        recs.append(_reco(
+            "mowing_rolling", "warning", "Keep mowers and rollers off today",
+            f"The surface is likely too wet for machinery ({' and '.join(reasons)}). Mowing or rolling wet "
+            f"turf risks rutting, scalping and compaction — and wet clippings spread fungal disease. Wait "
+            f"for it to dry or drain."))
+
+    # --- GP-scaled nitrogen guidance (PACE Turf approach) ---
+    ng = current.get("nitrogen_guidance")
+    if ng and ng.get("suggested_monthly_n_kg_ha") is not None:
+        recs.append(_reco(
+            "nitrogen_guidance", "good", "Nitrogen guidance (growth-potential scaled)",
+            f"Average growth potential over the last 30 days is {ng['mean_gp_30d_pct']:.0f}%, suggesting "
+            f"roughly {ng['suggested_monthly_n_kg_ha']:.0f} kg N/ha this month (= {ng['mean_gp_30d_pct']:.0f}% "
+            f"of the {ng['max_monthly_n_kg_ha']:.0f} kg/ha peak-growth ceiling). Feed only what growth can "
+            f"use — and if the site is in a Nitrate Vulnerable Zone, check the closed-period panel on the "
+            f"dashboard before applying manufactured nitrogen."))
+
     # --- Rainfall / flood ---
     if flood and flood.get("rainfall_last_24h_mm") is not None and flood["rainfall_last_24h_mm"] >= HEAVY_RAIN_24H_MM:
         recs.append(_reco(
@@ -837,6 +926,7 @@ def build_site_data(site_cfg: dict) -> dict:
         "wind_speed_max_kmh": today_row.get("wind_speed_max_kmh"),
         "uv_index_max": today_row.get("uv_index_max"),
         "spray_window": spray_window_status(today_row.get("wind_speed_max_kmh"), today_row.get("precip_mm")),
+        "morning_dew": morning_dew_outlook(hourly_by_date, (today + timedelta(days=1)).isoformat()),
     }
 
     # 7-day water balance (ET0 vs rainfall) ending today
@@ -862,6 +952,22 @@ def build_site_data(site_cfg: dict) -> dict:
         log(f"  flood fetch failed: {e}")
 
     daily_history_rows = [combined[d] for d in ordered_dates if d <= today_iso]
+
+    # GP-scaled nitrogen guidance: trailing 30-day mean Growth Potential
+    # applied to a configurable peak-growth monthly nitrogen ceiling.
+    gp_recent = [r.get("growth_potential_pct") for r in daily_history_rows[-30:]
+                 if r.get("growth_potential_pct") is not None]
+    if gp_recent:
+        mean_gp_30d = sum(gp_recent) / len(gp_recent)
+        max_n = float(site_cfg.get("max_monthly_n_kg_ha", MAX_MONTHLY_N_KG_HA))
+        current["nitrogen_guidance"] = {
+            "mean_gp_30d_pct": round(mean_gp_30d, 1),
+            "max_monthly_n_kg_ha": max_n,
+            "suggested_monthly_n_kg_ha": round(max_n * mean_gp_30d / 100.0, 1),
+        }
+    else:
+        current["nitrogen_guidance"] = None
+
     recommendations = build_recommendations(current, flood, daily_history_rows)
     top_severity = top_severity_of(recommendations)
 
